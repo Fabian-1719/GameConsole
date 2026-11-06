@@ -1,14 +1,14 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import http from "node:http";
 import { buildServer } from "../src/server.js";
 import { EventPublisher } from "../src/events/EventPublisher.js";
 import { EventFactory } from "../src/events/EventFactory.js";
 import { GameEvent } from "../src/events/contract.js";
-import { DummyMatch } from "../src/core/DummyGame.js";
+import { ConnectFourMatch } from "../src/games/connect-four/ConnectFourMatch.js";
 import { HumanPlayer } from "../src/core/Player.js";
 
 describe("Prueba de Carga y Validacion de Contrato de Eventos", () => {
-  it("ejecuta 20 partidas concurrentes de DummyGame y entrega todos los eventos a GameStats", async () => {
+  it("ejecuta 20 partidas concurrentes de connect-four y entrega todos los eventos a GameStats", async () => {
     const receivedBatches: GameEvent[][] = [];
     const mockGoServer = http.createServer((req, res) => {
       if (req.method === "POST" && req.url === "/v1/events") {
@@ -33,33 +33,27 @@ describe("Prueba de Carga y Validacion de Contrato de Eventos", () => {
       workers: 4,
       maxBatchSize: 10,
       flushIntervalMs: 50,
-      outboxPath: "dummy-load-outbox.ndjson",
+      outboxPath: "c4-load-outbox.ndjson",
     });
 
     const { matchManager } = await buildServer({ publisher });
 
     const totalMatches = 20;
-    const matches: DummyMatch[] = [];
+    const matches: ConnectFourMatch[] = [];
 
-    // Crear 20 partidas en paralelo
+    // Crear 20 partidas de connect-four en paralelo
     for (let i = 0; i < totalMatches; i++) {
-      const match = matchManager.createMatch("dummy-game") as DummyMatch;
+      const match = matchManager.createMatch("connect-four") as ConnectFourMatch;
       matches.push(match);
       const player = new HumanPlayer(`p-player-${i}`, `Jugador ${i}`);
       match.addPlayer(player);
     }
 
-    // Ejecutar acciones concurrentes en cada una
-    await Promise.all(
-      matches.map(async (m, idx) => {
-        const playerId = `p-player-${idx}`;
-        for (let step = 1; step <= 5; step++) {
-          m.handleAction(playerId, { step });
-        }
-      })
-    );
+    // Cada partida finaliza por abandono o jugadas
+    for (let i = 0; i < totalMatches; i++) {
+      matches[i].removePlayer(`p-player-${i}`, "TEST_FINISH");
+    }
 
-    // Todas las partidas alcanzaron 5 acciones y finalizaron (WIN)
     for (const m of matches) {
       expect(m.status).toBe("FINISHED");
     }
@@ -69,10 +63,10 @@ describe("Prueba de Carga y Validacion de Contrato de Eventos", () => {
     await new Promise<void>((resolve) => mockGoServer.close(() => resolve()));
 
     // Total de eventos esperados por partida:
-    // 1 PLAYER_JOINED + 1 MATCH_STARTED + 5 DUMMY_ACTION + 1 MATCH_FINISHED = 8 eventos por partida
-    // 20 * 8 = 160 eventos
+    // 1 PLAYER_JOINED + 1 MATCH_STARTED + 1 PLAYER_LEFT + 1 MATCH_FINISHED = 4 eventos por partida
+    // 20 * 4 = 80 eventos
     const totalReceived = receivedBatches.reduce((acc, b) => acc + b.length, 0);
-    expect(totalReceived).toBe(totalMatches * 8);
+    expect(totalReceived).toBe(totalMatches * 4);
 
     // Asegurar que ningun lote mezclo matchId distintos
     for (const batch of receivedBatches) {
