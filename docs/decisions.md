@@ -12,3 +12,5 @@ Este documento registra las decisiones tomadas durante el desarrollo de GameCons
 | ADR-006 | 2026-11-06 | Persistencia en Outbox (outbox.ndjson) con reintentos y reenvio periodico (30 s). | Garantiza tolerancia a desconexiones de GameStats (cero perdida de eventos). |
 | ADR-007 | 2026-11-06 | Ampliacion de catalog.json en GameStats para connect-four, snake-arena y memory-match. | Estandariza la validacion en Go para los tres juegos sin romper los existentes. |
 | ADR-008 | 2026-11-06 | Servicio HTTP independiente en SWI-Prolog (POST /decide) con Minimax y poda alfa-beta. | Desacopla el motor logico del servidor web y aprovecha el razonamiento declarativo nativo de Prolog. |
+| ADR-009 | 2026-11-06 | ConnectFourMatch con Board 6x7 privado, turnos secuenciales e integracion con PrologAiPlayer. | Garantiza reglas estrictas de gravedad, deteccion de 4 en linea y decision con Minimax. |
+| ADR-010 | 2026-11-06 | Eliminacion de DummyGame y transicion al primer juego oficial (ConnectFourGame). | Limpia el codigo temporal una vez validado el nucleo y el primer juego real. |
