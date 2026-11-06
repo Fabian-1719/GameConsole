@@ -11,3 +11,4 @@ Este documento registra las decisiones tomadas durante el desarrollo de GameCons
 | ADR-005 | 2026-11-06 | EventPublisher con colas por partida y flushing a 20 eventos o 200 ms. | Evita mezclar eventos de distintas partidas y optimiza el trafico de red hacia GameStats. |
 | ADR-006 | 2026-11-06 | Persistencia en Outbox (outbox.ndjson) con reintentos y reenvio periodico (30 s). | Garantiza tolerancia a desconexiones de GameStats (cero perdida de eventos). |
 | ADR-007 | 2026-11-06 | Ampliacion de catalog.json en GameStats para connect-four, snake-arena y memory-match. | Estandariza la validacion en Go para los tres juegos sin romper los existentes. |
+| ADR-008 | 2026-11-06 | Servicio HTTP independiente en SWI-Prolog (POST /decide) con Minimax y poda alfa-beta. | Desacopla el motor logico del servidor web y aprovecha el razonamiento declarativo nativo de Prolog. |
