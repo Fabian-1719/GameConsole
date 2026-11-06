@@ -3,11 +3,19 @@ import { buildServer } from "./server.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  const { server, matchManager } = await buildServer();
+  const { server, matchManager, publisher } = await buildServer({
+    publisherOptions: {
+      gamestatsUrl: config.gamestatsUrl,
+      outboxPath: config.outboxPath,
+      workers: config.publisherWorkers,
+      logMetrics: true,
+    },
+  });
 
   const shutdown = async () => {
     console.log("\nApagando console-server ordenadamente...");
     matchManager.closeAll("SERVER_SHUTDOWN");
+    await publisher.stop();
     await server.close();
     process.exit(0);
   };
