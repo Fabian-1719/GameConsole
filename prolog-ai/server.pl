@@ -32,16 +32,15 @@ handle_decide(Request) :-
     ).
 
 server :-
-    getenv('PORT', PortAtom),
-    atom_number(PortAtom, Port), !,
+    (   getenv('PORT', PortAtom),
+        atom_number(PortAtom, Port) ->
+        true
+    ;   Port = 5000
+    ),
     server(Port).
-server :-
-    server(5000).
 
 server(Port) :-
     set_setting(http:cors, [*]),
     http_server(http_dispatch, [port(Port)]),
-    format('prolog-ai escuchando en el puerto ~w~n', [Port]).
-
-% Si se ejecuta como script independiente
-:- initialization(server, main).
+    format('prolog-ai escuchando en el puerto ~w~n', [Port]),
+    thread_get_message(_).

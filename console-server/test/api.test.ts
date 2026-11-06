@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { FastifyInstance } from "fastify";
 import { buildServer } from "../src/server.js";
 
@@ -37,7 +37,7 @@ describe("API REST de console-server", () => {
     const games = JSON.parse(res.payload);
     expect(Array.isArray(games)).toBe(true);
     expect(games.length).toBeGreaterThanOrEqual(1);
-    expect(games[0].id).toBe("dummy-game");
+    expect(games[0].id).toBe("connect-four");
   });
 
   it("POST /api/matches crea una nueva partida y retorna matchId y playerId", async () => {
@@ -45,7 +45,7 @@ describe("API REST de console-server", () => {
       method: "POST",
       url: "/api/matches",
       payload: {
-        gameId: "dummy-game",
+        gameId: "connect-four",
         options: { playerName: "Jugador Test" },
       },
     });
@@ -53,7 +53,7 @@ describe("API REST de console-server", () => {
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.payload);
     expect(body.matchId).toMatch(/^m-/);
-    expect(body.gameId).toBe("dummy-game");
+    expect(body.gameId).toBe("connect-four");
     expect(body.playerId).toMatch(/^p-/);
   });
 

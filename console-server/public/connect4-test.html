@@ -1,0 +1,269 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Cuatro en Línea — Test UI</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+      margin: 0;
+    }
+    h1 { margin-bottom: 0.5rem; }
+    .controls {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      align-items: center;
+      background: #1e293b;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+    }
+    label { font-weight: 500; font-size: 0.9rem; }
+    select, input, button {
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: white;
+      font-size: 0.9rem;
+    }
+    button {
+      background: #2563eb;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+    button:hover { background: #1d4ed8; }
+    button:disabled { background: #475569; cursor: not-allowed; }
+    #status-box {
+      margin-bottom: 1rem;
+      font-size: 1.1rem;
+      min-height: 1.8rem;
+      font-weight: 600;
+      color: #38bdf8;
+    }
+    .board-container {
+      background: #1d4ed8;
+      padding: 1rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+    }
+    .drop-buttons {
+      display: grid;
+      grid-template-columns: repeat(7, 56px);
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .drop-btn {
+      background: #3b82f6;
+      height: 32px;
+      font-size: 1.1rem;
+      line-height: 1;
+      padding: 0;
+    }
+    .board-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 56px);
+      grid-template-rows: repeat(6, 56px);
+      gap: 8px;
+    }
+    .cell {
+      width: 56px;
+      height: 56px;
+      background: #0f172a;
+      border-radius: 50%;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+      transition: background 0.2s;
+    }
+    .cell.p1 { background: #ef4444; } /* Humano: Rojo */
+    .cell.p2 { background: #eab308; } /* CPU: Amarillo */
+    #log {
+      margin-top: 1.5rem;
+      max-width: 500px;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Cuatro en Línea (vs Prolog IA)</h1>
+  <p style="color: #94a3b8; margin-top: 0;">Página mínima de prueba de la Fase 3</p>
+
+  <div class="controls">
+    <label>Tu Nombre:
+      <input type="text" id="playerName" value="Fabián" style="width: 100px;">
+    </label>
+    <label>Dificultad IA:
+      <select id="level">
+        <option value="1">Nivel 1 (Fácil, prof 2)</option>
+        <option value="2" selected>Nivel 2 (Medio, prof 4)</option>
+        <option value="3">Nivel 3 (Difícil, prof 6)</option>
+      </select>
+    </label>
+    <button id="startBtn" onclick="startMatch()">Nueva Partida</button>
+  </div>
+
+  <div id="status-box">Haz clic en "Nueva Partida" para comenzar</div>
+
+  <div class="board-container">
+    <div class="drop-buttons" id="dropButtons">
+      <!-- Botones de tiro para cada columna (0 a 6) -->
+    </div>
+    <div class="board-grid" id="boardGrid">
+      <!-- 42 casillas (6 x 7) -->
+    </div>
+  </div>
+
+  <div id="log">Partida no iniciada</div>
+
+  <script>
+    let ws = null;
+    let currentMatchId = null;
+    let myPlayerId = null;
+    let isMyTurn = false;
+
+    // Inicializar botones y celdas
+    const dropContainer = document.getElementById("dropButtons");
+    for (let c = 0; c < 7; c++) {
+      const btn = document.createElement("button");
+      btn.className = "drop-btn";
+      btn.innerHTML = "↓";
+      btn.id = "btn-col-" + c;
+      btn.disabled = true;
+      btn.onclick = () => makeMove(c);
+      dropContainer.appendChild(btn);
+    }
+
+    const gridContainer = document.getElementById("boardGrid");
+    for (let r = 0; r < 6; r++) {
+      for (let c = 0; c < 7; c++) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.id = `cell-${r}-${c}`;
+        gridContainer.appendChild(cell);
+      }
+    }
+
+    async function startMatch() {
+      if (ws) {
+        ws.close();
+      }
+
+      const name = document.getElementById("playerName").value || "Jugador";
+      const level = parseInt(document.getElementById("level").value, 10);
+      document.getElementById("status-box").innerText = "Creando partida en el servidor...";
+
+      try {
+        const res = await fetch("/api/matches", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gameId: "connect-four",
+            options: { playerName: name, level }
+          })
+        });
+
+        if (!res.ok) throw new Error("Error creando partida");
+        const data = await res.json();
+        currentMatchId = data.matchId;
+        myPlayerId = data.playerId;
+
+        connectWebSocket(data.matchId, data.playerId);
+      } catch (err) {
+        document.getElementById("status-box").innerText = "Error: " + err.message;
+      }
+    }
+
+    function connectWebSocket(matchId, playerId) {
+      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${location.host}/ws/matches/${matchId}?playerId=${playerId}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        document.getElementById("log").innerText = `Conectado a partida ${matchId}`;
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "STATE") {
+          updateBoard(msg.state);
+        } else if (msg.type === "FINISHED") {
+          handleFinished(msg);
+        } else if (msg.type === "ERROR") {
+          document.getElementById("status-box").innerText = "Aviso: " + msg.message;
+        }
+      };
+
+      ws.onclose = () => {
+        document.getElementById("log").innerText += " (Conexión cerrada)";
+      };
+    }
+
+    function updateBoard(state) {
+      const board = state.board;
+      for (let r = 0; r < 6; r++) {
+        for (let c = 0; c < 7; c++) {
+          const el = document.getElementById(`cell-${r}-${c}`);
+          el.className = "cell";
+          if (board[r][c] === 1) el.classList.add("p1");
+          if (board[r][c] === 2) el.classList.add("p2");
+        }
+      }
+
+      if (state.status === "RUNNING") {
+        isMyTurn = (state.currentTurnDisc === 1);
+        if (isMyTurn) {
+          document.getElementById("status-box").innerHTML = "Tu turno (Fichas rojas) — Elige una columna";
+          document.getElementById("status-box").style.color = "#ef4444";
+        } else {
+          document.getElementById("status-box").innerHTML = "Pensando la computadora (Prolog Minimax)...";
+          document.getElementById("status-box").style.color = "#eab308";
+        }
+
+        // Habilitar botones de tiro si es mi turno y la columna no esta llena
+        for (let c = 0; c < 7; c++) {
+          const isFull = board[0][c] !== 0;
+          document.getElementById("btn-col-" + c).disabled = !isMyTurn || isFull;
+        }
+      }
+    }
+
+    function makeMove(col) {
+      if (!isMyTurn || !ws) return;
+      ws.send(JSON.stringify({
+        type: "ACTION",
+        playerId: myPlayerId,
+        payload: { column: col }
+      }));
+    }
+
+    function handleFinished(info) {
+      for (let c = 0; c < 7; c++) {
+        document.getElementById("btn-col-" + c).disabled = true;
+      }
+      const box = document.getElementById("status-box");
+      if (info.result === "WIN") {
+        box.innerText = "¡FELICITACIONES, GANASTE LA PARTIDA!";
+        box.style.color = "#22c55e";
+      } else if (info.result === "LOSS") {
+        box.innerText = "La computadora ha ganado la partida.";
+        box.style.color = "#eab308";
+      } else if (info.result === "DRAW") {
+        box.innerText = "¡Partida terminada en EMPATE!";
+        box.style.color = "#a855f7";
+      } else {
+        box.innerText = "Partida finalizada: " + info.result;
+      }
+    }
+  </script>
+</body>
+</html>

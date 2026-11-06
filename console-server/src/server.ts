@@ -3,7 +3,7 @@ import fastifyWebsocket from "@fastify/websocket";
 import fastifyCors from "@fastify/cors";
 import { GameRegistry } from "./core/GameRegistry.js";
 import { MatchManager } from "./core/MatchManager.js";
-import { DummyGame } from "./core/DummyGame.js";
+import { ConnectFourGame } from "./games/connect-four/ConnectFourGame.js";
 import { registerRoutes } from "./api/routes.js";
 import { EventPublisher, EventPublisherOptions } from "./events/EventPublisher.js";
 import { GameEvent } from "./events/contract.js";
@@ -27,8 +27,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<{
   await server.register(fastifyWebsocket);
 
   const registry = options.registry ?? new GameRegistry();
-  if (!registry.has("dummy-game")) {
-    registry.register(new DummyGame());
+  // Registrar juegos oficiales
+  if (!registry.has("connect-four")) {
+    registry.register(new ConnectFourGame());
   }
 
   const matchManager = options.matchManager ?? new MatchManager(registry);
