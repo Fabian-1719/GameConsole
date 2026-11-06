@@ -1,5 +1,7 @@
 ﻿import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { WebSocket } from "ws";
+import { promises as fs } from "node:fs";
+import { join } from "node:path";
 import { MatchManager } from "../core/MatchManager.js";
 import { GameRegistry } from "../core/GameRegistry.js";
 import { HumanPlayer } from "../core/Player.js";
@@ -19,6 +21,20 @@ export function registerRoutes(
   registry: GameRegistry,
   matchManager: MatchManager
 ): void {
+  // GET / y GET /connect4 (Pagina minima de prueba HTML)
+  const serveHtml = async (_req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const htmlPath = join(process.cwd(), "public", "connect4-test.html");
+      const content = await fs.readFile(htmlPath, "utf8");
+      return reply.type("text/html").send(content);
+    } catch {
+      return reply.status(404).send({ error: "connect4-test.html no encontrado" });
+    }
+  };
+
+  server.get("/", serveHtml);
+  server.get("/connect4", serveHtml);
+
   // GET /health
   server.get("/health", async (_req: FastifyRequest, reply: FastifyReply) => {
     return reply.send({ status: "ok", timestamp: new Date().toISOString() });
@@ -96,8 +112,15 @@ export function registerRoutes(
         }
       };
 
+      const onError = (msg: unknown) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "ERROR", message: String(msg) }));
+        }
+      };
+
       match.on("state", onState);
       match.on("finished", onFinished);
+      match.on("error", onError);
 
       socket.on("message", async (data: Buffer | string) => {
         try {
@@ -117,6 +140,7 @@ export function registerRoutes(
       socket.on("close", () => {
         match.off("state", onState);
         match.off("finished", onFinished);
+        match.off("error", onError);
 
         // Si la partida sigue activa, tratar desconexion como abandono segun seccion 5.3
         if (match.status === "RUNNING") {
