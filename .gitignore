@@ -1,0 +1,26 @@
+﻿# Dependencias
+node_modules/
+
+# Compilacion
+dist/
+build/
+*.tsbuildinfo
+
+# Variables de entorno y credenciales
+.env
+.env.*
+!.env.example
+
+# Datos de ejecucion y persistencia
+outbox.ndjson
+rejected.ndjson
+failed-batches/
+*.log
+
+# IDEs y SO
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
