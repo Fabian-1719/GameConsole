@@ -57,6 +57,7 @@ describe("API REST de console-server", () => {
     expect(Array.isArray(games)).toBe(true);
     expect(games.length).toBeGreaterThanOrEqual(1);
     expect(games[0].id).toBe("connect-four");
+    expect(games.map((game: { id: string }) => game.id)).toContain("snake-arena");
   });
 
   it("POST /api/matches crea una nueva partida y retorna matchId y playerId", async () => {

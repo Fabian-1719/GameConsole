@@ -1,4 +1,5 @@
 import { ApiClient, Game, MatchSummary } from "./api/ApiClient.js";
+import { matchSocketManager } from "./net/MatchSocketManager.js";
 
 type Navigate = (path: string) => void;
 
@@ -108,8 +109,20 @@ export class ConsoleView {
           <p class="eyebrow">${escapeHtml(game.id)}</p>
           <h3>${escapeHtml(game.name)}</h3>
           <p class="muted">${escapeHtml(game.description)}</p>
+          ${game.id === "connect-four" ? `
+            <label class="level-picker">
+              <span class="level-picker-label">Dificultad de la IA</span>
+              <span class="level-select-wrap">
+                <select data-level-game="${escapeHtml(game.id)}" aria-label="Dificultad de la IA">
+                  <option value="1">Nivel 1 · Fácil</option>
+                  <option value="2" selected>Nivel 2 · Normal</option>
+                  <option value="3">Nivel 3 · Difícil</option>
+                </select>
+              </span>
+              <span class="level-hint">A mayor nivel, más profundidad de búsqueda.</span>
+            </label>` : ""}
           <button class="button button-primary" data-action="create" data-game-id="${escapeHtml(game.id)}">
-            Nueva partida
+            Crear y jugar
           </button>
         </article>`).join("")
       : '<p class="muted">No hay juegos registrados.</p>';
@@ -125,19 +138,29 @@ export class ConsoleView {
     const markup = matches.length
       ? matches.map((match) => {
         const path = `/play/${encodeURIComponent(match.gameId)}/${encodeURIComponent(match.matchId)}`;
+        const lastState = match.gameId === "snake-arena"
+          ? matchSocketManager.getLastState(match.matchId) as { paused?: boolean } | null
+          : null;
+        const status = lastState?.paused ? "En pausa" : match.status;
         return `<tr>
           <td><span class="game-pill">${escapeHtml(match.gameId)}</span></td>
           <td class="mono">${escapeHtml(match.matchId.slice(0, 8))}</td>
-          <td><span class="status-pill">${escapeHtml(match.status)}</span></td>
+          <td><span class="status-pill">${escapeHtml(status)}</span></td>
           <td>${escapeHtml(new Date(match.startedAt).toLocaleTimeString())}</td>
           <td class="actions">
             <a class="button button-small" href="${escapeHtml(path)}" data-action="open" data-path="${escapeHtml(path)}">Abrir</a>
-            <a class="button button-small button-quiet" href="${escapeHtml(path)}?spectator=1" target="_blank" rel="noopener noreferrer">Ver en otra pestaña</a>
+            <a class="button button-small button-quiet" href="${escapeHtml(path)}" target="_blank" rel="noopener noreferrer" title="Abre la partida en otra pestaña; allí no estará guardada tu llave de jugador">Abrir en otra pestaña</a>
           </td>
         </tr>`;
       }).join("")
       : '<tr><td colspan="5" class="muted">Todavía no hay partidas.</td></tr>';
-    const signature = JSON.stringify(matches);
+    const signature = JSON.stringify(matches.map((match) => ({
+      ...match,
+      displayStatus: match.gameId === "snake-arena" &&
+        (matchSocketManager.getLastState(match.matchId) as { paused?: boolean } | null)?.paused
+        ? "En pausa"
+        : match.status,
+    })));
     if (signature !== this.lastMatchesSignature) {
       target.innerHTML = markup;
       this.lastMatchesSignature = signature;
@@ -147,15 +170,20 @@ export class ConsoleView {
   private async createMatch(gameId: string, button: HTMLButtonElement): Promise<void> {
     button.disabled = true;
     this.clearError();
+    const levelPicker = this.root.querySelector<HTMLSelectElement>(`[data-level-game="${CSS.escape(gameId)}"]`);
+    const options = levelPicker ? { level: Number(levelPicker.value) } : {};
     try {
-      const match = await this.api.createMatch(gameId);
+      const match = await this.api.createMatch(gameId, options);
       if (this.destroyed) {
         return;
       }
       window.sessionStorage.setItem(`player:${match.matchId}`, match.playerId);
-      this.navigate(`/play/${encodeURIComponent(match.gameId)}/${encodeURIComponent(match.matchId)}`);
+      matchSocketManager.open(match.matchId, match.playerId);
+      const path = `/play/${encodeURIComponent(match.gameId)}/${encodeURIComponent(match.matchId)}`;
+      this.navigate(path);
     } catch (error) {
       this.showError(error);
+    } finally {
       button.disabled = false;
     }
   }
