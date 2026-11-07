@@ -2,6 +2,7 @@ import { ApiClient } from "./api/ApiClient.js";
 import { ConsoleView } from "./ConsoleView.js";
 import { ConnectFourView } from "./games/connect-four/ConnectFourView.js";
 import { SnakeView } from "./games/snake/SnakeView.js";
+import { MemoryView } from "./games/memory/MemoryView.js";
 import { matchSocketManager } from "./net/MatchSocketManager.js";
 import { Router, Route } from "./router.js";
 import "./style.css";
@@ -69,7 +70,7 @@ function renderMatch(route: Extract<Route, { kind: "play" }>): void {
     return;
   }
 
-  if (route.gameId !== "connect-four" && route.gameId !== "snake-arena") {
+  if (route.gameId !== "connect-four" && route.gameId !== "snake-arena" && route.gameId !== "memory-match") {
     appRoot.innerHTML = `<section class="page-heading"><h1>Vista pendiente</h1><p class="muted">${escapeHtml(route.gameId)} aún no tiene interfaz.</p><a class="button button-quiet" href="/" data-back>← Volver a la consola</a></section>`;
     appRoot.querySelector("[data-back]")?.addEventListener("click", (event) => {
       event.preventDefault();
@@ -86,7 +87,7 @@ function renderMatch(route: Extract<Route, { kind: "play" }>): void {
       spectator
     );
     destroyCurrentView = () => view.destroy();
-  } else {
+  } else if (route.gameId === "snake-arena") {
     const view = new SnakeView(
       appRoot,
       route.matchId,
@@ -94,6 +95,21 @@ function renderMatch(route: Extract<Route, { kind: "play" }>): void {
       (path) => router.navigate(path),
       async () => {
         const match = await api.createMatch("snake-arena");
+        window.sessionStorage.setItem(`player:${match.matchId}`, match.playerId);
+        matchSocketManager.open(match.matchId, match.playerId);
+        router.navigate(`/play/${encodeURIComponent(match.gameId)}/${encodeURIComponent(match.matchId)}`);
+      },
+      spectator
+    );
+    destroyCurrentView = () => view.destroy();
+  } else {
+    const view = new MemoryView(
+      appRoot,
+      route.matchId,
+      spectator ? `spectator-${crypto.randomUUID()}` : playerId!,
+      (path) => router.navigate(path),
+      async () => {
+        const match = await api.createMatch("memory-match");
         window.sessionStorage.setItem(`player:${match.matchId}`, match.playerId);
         matchSocketManager.open(match.matchId, match.playerId);
         router.navigate(`/play/${encodeURIComponent(match.gameId)}/${encodeURIComponent(match.matchId)}`);
