@@ -166,7 +166,7 @@ describe("SnakeMatch", () => {
       match.tick();
     }
 
-    expect(events.map((event) => event.type)).toEqual(["PLAYER_JOINED", "MATCH_STARTED"]);
+    expect(events.map((event) => event.type)).toEqual(["MATCH_STARTED", "PLAYER_JOINED"]);
   });
 
   it("keeps events isolated across five simultaneous matches", () => {

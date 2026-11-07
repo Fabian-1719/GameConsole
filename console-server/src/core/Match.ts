@@ -1,4 +1,4 @@
-﻿import { EventEmitter } from "node:events";
+import { EventEmitter } from "node:events";
 import { Player } from "./Player.js";
 import { GameEvent, MatchResult } from "../events/contract.js";
 import { EventFactory } from "../events/EventFactory.js";
@@ -23,6 +23,7 @@ export abstract class Match extends EventEmitter {
   protected _status: MatchStatus;
   protected _players: Map<string, Player>;
   protected _finishedAt?: Date;
+  protected _joinedPlayerIdsEmitted: Set<string>;
 
   constructor(gameId: string, options: MatchOptions = {}) {
     super();
@@ -32,6 +33,7 @@ export abstract class Match extends EventEmitter {
     this.startedAt = new Date();
     this._status = "WAITING";
     this._players = new Map();
+    this._joinedPlayerIdsEmitted = new Set();
   }
 
   public get status(): MatchStatus {
@@ -51,16 +53,18 @@ export abstract class Match extends EventEmitter {
       throw new Error("No se pueden unir jugadores a una partida finalizada");
     }
     this._players.set(player.id, player);
-    
-    // Emision de evento de union
-    this.emitEvent(
-      EventFactory.playerJoined(this.gameId, this.matchId, player.id, {
-        name: player.name,
-      }, this.gameVersion)
-    );
 
     if (this._status === "WAITING" && this.canStart()) {
       this.start();
+    } else if (this._status === "RUNNING") {
+      if (player.isHuman && !this._joinedPlayerIdsEmitted.has(player.id)) {
+        this._joinedPlayerIdsEmitted.add(player.id);
+        this.emitEvent(
+          EventFactory.playerJoined(this.gameId, this.matchId, player.id, {
+            name: player.name,
+          }, this.gameVersion)
+        );
+      }
     }
   }
 
@@ -91,12 +95,25 @@ export abstract class Match extends EventEmitter {
     const playerIds = Array.from(this._players.keys());
     const isVsAi = Array.from(this._players.values()).some((p) => !p.isHuman);
 
+    // 1. MATCH_STARTED al inicializar la partida (Seccion 5.3)
     this.emitEvent(
       EventFactory.matchStarted(this.gameId, this.matchId, {
         mode: isVsAi ? "VS_AI" : "SOLO",
         players: playerIds,
       }, this.gameVersion)
     );
+
+    // 2. PLAYER_JOINED por cada jugador activo
+    for (const player of this._players.values()) {
+      if (player.isHuman && !this._joinedPlayerIdsEmitted.has(player.id)) {
+        this._joinedPlayerIdsEmitted.add(player.id);
+        this.emitEvent(
+          EventFactory.playerJoined(this.gameId, this.matchId, player.id, {
+            name: player.name,
+          }, this.gameVersion)
+        );
+      }
+    }
 
     this.broadcastState();
   }
