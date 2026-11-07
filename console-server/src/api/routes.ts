@@ -1,11 +1,14 @@
 ﻿import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { WebSocket } from "ws";
 import { promises as fs } from "node:fs";
-import { join } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { MatchManager } from "../core/MatchManager.js";
 import { GameRegistry } from "../core/GameRegistry.js";
 import { HumanPlayer } from "../core/Player.js";
 import { EventFactory } from "../events/EventFactory.js";
+
+const consoleWebRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../console-web/dist");
 
 interface CreateMatchBody {
   gameId: string;
@@ -32,7 +35,12 @@ export function registerRoutes(
     }
   };
 
-  server.get("/", serveHtml);
+  server.get("/", async (req: FastifyRequest, reply: FastifyReply) => {
+    if (await fileExists(resolve(consoleWebRoot, "index.html"))) {
+      return serveConsoleWeb(req, reply);
+    }
+    return serveHtml(req, reply);
+  });
   server.get("/connect4", serveHtml);
 
   // GET /health
@@ -152,4 +160,98 @@ export function registerRoutes(
       });
     }
   );
+
+  server.setNotFoundHandler(async (req, reply) => {
+    if (!(await fileExists(resolve(consoleWebRoot, "index.html")))) {
+      return reply.status(404).send({ error: "Not Found" });
+    }
+    return serveConsoleWeb(req, reply);
+  });
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    return (await fs.stat(filePath)).isFile();
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function serveConsoleWeb(
+  req: FastifyRequest,
+  reply: FastifyReply
+): Promise<FastifyReply> {
+  const pathname = new URL(req.url, "http://localhost").pathname;
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(pathname);
+  } catch {
+    return reply.status(400).send({ error: "Invalid URL path" });
+  }
+
+  if (
+    (req.method !== "GET" && req.method !== "HEAD") ||
+    decodedPath === "/api" || decodedPath.startsWith("/api/") ||
+    decodedPath === "/ws" || decodedPath.startsWith("/ws/") ||
+    decodedPath === "/health" || decodedPath.startsWith("/health/")
+  ) {
+    return reply.status(404).send({ error: "Not Found" });
+  }
+
+  const filePath = resolve(consoleWebRoot, `.${decodedPath}`);
+  const relativePath = relative(consoleWebRoot, filePath);
+  if (
+    relativePath === ".." ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+  ) {
+    return reply.status(400).send({ error: "Invalid URL path" });
+  }
+
+  if (extname(decodedPath)) {
+    try {
+      const file = await fs.readFile(filePath);
+      return reply.type(contentType(filePath)).send(file);
+    } catch (error) {
+      if (!isNodeError(error) || (error.code !== "ENOENT" && error.code !== "ENOTDIR")) {
+        throw error;
+      }
+      return reply.status(404).send({ error: "Not Found" });
+    }
+  }
+
+  const indexPath = resolve(consoleWebRoot, "index.html");
+  return reply.type("text/html; charset=utf-8").send(await fs.readFile(indexPath));
+}
+
+function contentType(filePath: string): string {
+  switch (extname(filePath).toLowerCase()) {
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".ico":
+      return "image/x-icon";
+    case ".js":
+      return "text/javascript; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".png":
+      return "image/png";
+    case ".svg":
+      return "image/svg+xml";
+    case ".woff":
+      return "font/woff";
+    case ".woff2":
+      return "font/woff2";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }

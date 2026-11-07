@@ -19,6 +19,7 @@ GameStats (Go Ingestion puerto 8080 ──► Scala Analytics puerto 8081)
 ## Estructura del repositorio
 
 - **`console-server/`**: Servidor de videojuegos orientado a objetos desarrollado en TypeScript (Node 20, Fastify, WebSocket).
+- **`console-web/`**: Aplicación web vanilla en TypeScript, servida en desarrollo por Vite y en producción por `console-server`.
 - **`prolog-ai/`**: Servicio independiente de inteligencia artificial en SWI-Prolog (Minimax con poda alfa-beta para Cuatro en Línea).
 - **`docs/`**: Documentación técnica:
   - `docs/handoff.md`: Documento de traspaso detallado y guía para agregar nuevos juegos.
@@ -45,7 +46,7 @@ go run ./cmd/ingestion
 ### 2. Iniciar el servicio Prolog AI
 ```bash
 cd gameconsole/prolog-ai
-swipl -s server.pl
+swipl -q -s server.pl -g "server:server"
 ```
 *O utilizando Docker:*
 ```bash
@@ -66,8 +67,17 @@ npm run dev
 ### 4. Jugar Cuatro en Línea
 Abre tu navegador web en:
 ```
-http://localhost:3000/connect4
+http://localhost:3000/
 ```
+También puedes correr la interfaz en modo desarrollo con el proxy a `console-server`:
+```bash
+cd gameconsole/console-web
+npm install
+npm run dev
+# http://localhost:5173
+```
+Para producción, ejecuta `npm run build` en `console-web`; `console-server` servirá
+`console-web/dist` en `/`. La página de prueba anterior se conserva en `/connect4`.
 
 ---
 
@@ -78,7 +88,14 @@ http://localhost:3000/connect4
 cd gameconsole/console-server
 npm test
 ```
-*Ejecuta 26 pruebas automáticas cubriendo reglas del tablero, colas concurrentes de eventos, outbox, API REST y prueba de integración E2E contra Prolog.*
+*Ejecuta 27 pruebas automáticas cubriendo reglas del tablero, colas concurrentes de eventos, outbox, API REST y prueba de integración E2E contra Prolog.*
+
+### Pruebas de Console Web (TypeScript / Vitest)
+```bash
+cd gameconsole/console-web
+npm test
+npm run build
+```
 
 ### Pruebas de Prolog AI (plunit)
 ```bash
