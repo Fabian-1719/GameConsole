@@ -4,6 +4,8 @@ import fastifyCors from "@fastify/cors";
 import { GameRegistry } from "./core/GameRegistry.js";
 import { MatchManager } from "./core/MatchManager.js";
 import { ConnectFourGame } from "./games/connect-four/ConnectFourGame.js";
+import { SnakeGame } from "./games/snake/SnakeGame.js";
+import { MemoryGame } from "./games/memory/MemoryGame.js";
 import { registerRoutes } from "./api/routes.js";
 import { EventPublisher, EventPublisherOptions } from "./events/EventPublisher.js";
 import { GameEvent } from "./events/contract.js";
@@ -30,6 +32,12 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<{
   // Registrar juegos oficiales
   if (!registry.has("connect-four")) {
     registry.register(new ConnectFourGame());
+  }
+  if (!registry.has("snake-arena")) {
+    registry.register(new SnakeGame());
+  }
+  if (!registry.has("memory-match")) {
+    registry.register(new MemoryGame());
   }
 
   const matchManager = options.matchManager ?? new MatchManager(registry);
@@ -60,6 +68,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<{
   };
 
   registerRoutes(server, registry, matchManager);
+  server.addHook("onClose", async () => {
+    matchManager.closeAll("SHUTDOWN");
+    await publisher.stop();
+  });
 
   return { server, registry, matchManager, publisher };
 }
