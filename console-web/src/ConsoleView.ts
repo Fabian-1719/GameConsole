@@ -1,4 +1,5 @@
 import { ApiClient, Game, MatchSummary } from "./api/ApiClient.js";
+import { recordRecentMatch } from "./api/MatchHistory.js";
 import { matchSocketManager } from "./net/MatchSocketManager.js";
 
 type Navigate = (path: string) => void;
@@ -178,6 +179,11 @@ export class ConsoleView {
         return;
       }
       window.sessionStorage.setItem(`player:${match.matchId}`, match.playerId);
+      try {
+        recordRecentMatch(match);
+      } catch (error) {
+        console.error("[GameConsole] No se pudo guardar la partida para el panel de resultados:", error);
+      }
       matchSocketManager.open(match.matchId, match.playerId);
       const path = `/play/${encodeURIComponent(match.gameId)}/${encodeURIComponent(match.matchId)}`;
       this.navigate(path);

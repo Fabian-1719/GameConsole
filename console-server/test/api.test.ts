@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { FastifyInstance } from "fastify";
+import http from "node:http";
 import { buildServer } from "../src/server.js";
 
 describe("API REST de console-server", () => {
@@ -99,5 +100,45 @@ describe("API REST de console-server", () => {
     const matches = JSON.parse(res.payload);
     expect(Array.isArray(matches)).toBe(true);
     expect(matches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("GET /api/analytics/matches/:id consulta Scala y conserva el filtro de juego", async () => {
+    const analysis = { matchId: "m-analytics", gameId: "snake-arena", complete: true, score: 30 };
+    let requestPath = "";
+    const analyticsServer = http.createServer((request, response) => {
+      requestPath = request.url ?? "";
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(analysis));
+    });
+    await new Promise<void>((resolve) => analyticsServer.listen(0, resolve));
+    const port = (analyticsServer.address() as { port: number }).port;
+    const app = await buildServer({ analyticsUrl: `http://127.0.0.1:${port}` });
+
+    try {
+      const response = await app.server.inject({
+        method: "GET",
+        url: "/api/analytics/matches/m-analytics?gameId=snake-arena",
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(analysis);
+      expect(requestPath).toBe("/v1/matches/m-analytics?gameId=snake-arena");
+    } finally {
+      await app.server.close();
+      await new Promise<void>((resolve) => analyticsServer.close(() => resolve()));
+    }
+  });
+
+  it("GET /api/analytics/matches/:id informa si GameStats no está disponible", async () => {
+    const app = await buildServer({ analyticsUrl: "http://127.0.0.1:1" });
+    try {
+      const response = await app.server.inject({
+        method: "GET",
+        url: "/api/analytics/matches/m-unavailable?gameId=memory-match",
+      });
+      expect(response.statusCode).toBe(502);
+      expect(response.json().error).toContain("GameStats");
+    } finally {
+      await app.server.close();
+    }
   });
 });

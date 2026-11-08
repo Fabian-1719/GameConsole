@@ -1,8 +1,10 @@
 ﻿# GameConsole — Especificación de eventos y contrato con GameStats
 
-Estado: **Congelado para integración con GameStats**
+Estado: **Contrato integrado y cubierto por pruebas con el catálogo real de Go**
 
 Este documento define el formato estándar de eventos emitidos por `console-server` hacia la plataforma `GameStats` (Go/Scala), garantizando compatibilidad con el validador estricto y el catálogo de Go.
+
+GameStats mantiene el catálogo en `go-ingestion/config/catalog.json` y calcula los análisis de `connect-four`, `snake-arena` y `memory-match` en Scala. GameConsole consulta el resultado por `GET /api/analytics/matches/:matchId?gameId=:gameId`; el servidor lo reenvía a `GET /v1/matches/:matchId` en Scala. El panel actualiza las partidas recientes mientras Go termina de agrupar y enviar cada partida.
 
 ---
 

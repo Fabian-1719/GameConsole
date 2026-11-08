@@ -15,6 +15,7 @@ export interface BuildServerOptions {
   matchManager?: MatchManager;
   publisher?: EventPublisher;
   publisherOptions?: EventPublisherOptions;
+  analyticsUrl?: string;
 }
 
 export async function buildServer(options: BuildServerOptions = {}): Promise<{
@@ -67,7 +68,12 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<{
     return match;
   };
 
-  registerRoutes(server, registry, matchManager);
+  registerRoutes(
+    server,
+    registry,
+    matchManager,
+    options.analyticsUrl ?? process.env.ANALYTICS_URL ?? "http://localhost:8081"
+  );
   server.addHook("onClose", async () => {
     matchManager.closeAll("SHUTDOWN");
     await publisher.stop();

@@ -1,4 +1,8 @@
 ﻿export type Disc = 0 | 1 | 2; // 0: vacio, 1: humano, 2: computadora
+export interface BoardPosition {
+  row: number;
+  column: number;
+}
 
 export class Board {
   public static readonly ROWS = 6;
@@ -56,17 +60,24 @@ export class Board {
   }
 
   public findWinner(): Disc | null {
+    return this.findWinningLine()?.disc ?? null;
+  }
+
+  public findWinningLine(disc?: 1 | 2): { disc: 1 | 2; positions: BoardPosition[] } | null {
     // 1. Horizontal
     for (let r = 0; r < Board.ROWS; r++) {
       for (let c = 0; c <= Board.COLS - 4; c++) {
         const val = this.grid[r][c];
         if (
-          val !== 0 &&
+          val !== 0 && (disc === undefined || val === disc) &&
           val === this.grid[r][c + 1] &&
           val === this.grid[r][c + 2] &&
           val === this.grid[r][c + 3]
         ) {
-          return val;
+          return {
+            disc: val,
+            positions: Array.from({ length: 4 }, (_, offset) => ({ row: r, column: c + offset })),
+          };
         }
       }
     }
@@ -76,12 +87,15 @@ export class Board {
       for (let c = 0; c < Board.COLS; c++) {
         const val = this.grid[r][c];
         if (
-          val !== 0 &&
+          val !== 0 && (disc === undefined || val === disc) &&
           val === this.grid[r + 1][c] &&
           val === this.grid[r + 2][c] &&
           val === this.grid[r + 3][c]
         ) {
-          return val;
+          return {
+            disc: val,
+            positions: Array.from({ length: 4 }, (_, offset) => ({ row: r + offset, column: c })),
+          };
         }
       }
     }
@@ -91,12 +105,15 @@ export class Board {
       for (let c = 0; c <= Board.COLS - 4; c++) {
         const val = this.grid[r][c];
         if (
-          val !== 0 &&
+          val !== 0 && (disc === undefined || val === disc) &&
           val === this.grid[r + 1][c + 1] &&
           val === this.grid[r + 2][c + 2] &&
           val === this.grid[r + 3][c + 3]
         ) {
-          return val;
+          return {
+            disc: val,
+            positions: Array.from({ length: 4 }, (_, offset) => ({ row: r + offset, column: c + offset })),
+          };
         }
       }
     }
@@ -106,17 +123,50 @@ export class Board {
       for (let c = 0; c <= Board.COLS - 4; c++) {
         const val = this.grid[r][c];
         if (
-          val !== 0 &&
+          val !== 0 && (disc === undefined || val === disc) &&
           val === this.grid[r - 1][c + 1] &&
           val === this.grid[r - 2][c + 2] &&
           val === this.grid[r - 3][c + 3]
         ) {
-          return val;
+          return {
+            disc: val,
+            positions: Array.from({ length: 4 }, (_, offset) => ({ row: r - offset, column: c + offset })),
+          };
         }
       }
     }
 
     return null;
+  }
+
+  public hasConnectFourAt(row: number, column: number, disc: 1 | 2): boolean {
+    if (this.getCell(row, column) !== disc) {
+      return false;
+    }
+
+    const directions: ReadonlyArray<readonly [number, number]> = [
+      [0, 1],
+      [1, 0],
+      [1, 1],
+      [1, -1],
+    ];
+    return directions.some(([rowStep, columnStep]) => {
+      let connected = 1;
+      for (const sign of [-1, 1]) {
+        let nextRow = row + rowStep * sign;
+        let nextColumn = column + columnStep * sign;
+        while (
+          nextRow >= 0 && nextRow < Board.ROWS &&
+          nextColumn >= 0 && nextColumn < Board.COLS &&
+          this.grid[nextRow][nextColumn] === disc
+        ) {
+          connected++;
+          nextRow += rowStep * sign;
+          nextColumn += columnStep * sign;
+        }
+      }
+      return connected >= 4;
+    });
   }
 
   public toMatrix(): Disc[][] {

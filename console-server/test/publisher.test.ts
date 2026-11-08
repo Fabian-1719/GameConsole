@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import { EventPublisher } from "../src/events/EventPublisher.js";
@@ -169,5 +169,49 @@ describe("EventPublisher (concurrencia, lotes, reintentos y outbox)", () => {
     // Y el archivo outbox quedo vacio
     const remaining = await fs.readFile(outboxTestFile, "utf8");
     expect(remaining.trim()).toBe("");
+  });
+
+  it("no cuenta como exitoso un lote 207 que contiene eventos rechazados", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const server = http.createServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        res.writeHead(207, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          received: 1,
+          accepted: 0,
+          rejected: 1,
+          errors: [{ index: 0, eventId: "e-invalid", reason: "UNKNOWN_TYPE" }],
+        }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as any).port;
+    const publisher = new EventPublisher({
+      gamestatsUrl: `http://127.0.0.1:${port}`,
+      maxRetries: 0,
+      outboxPath: outboxTestFile,
+    });
+
+    try {
+      publisher.start();
+      publisher.publish(EventFactory.create({
+        gameId: "snake-arena",
+        matchId: "m-rejected",
+        type: "UNKNOWN_EVENT",
+        data: {},
+      }));
+      await publisher.flushAll();
+      await publisher.stop();
+
+      expect(publisher.getStats().eventsSent).toBe(0);
+      expect(publisher.getStats().batchesFailed).toBe(1);
+      expect(publisher.getStats().batchesOutboxed).toBe(1);
+      expect(errorLog).toHaveBeenCalledWith(expect.stringContaining("UNKNOWN_TYPE"));
+      expect(await fs.readFile(outboxTestFile, "utf8")).toContain("UNKNOWN_EVENT");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      errorLog.mockRestore();
+    }
   });
 });

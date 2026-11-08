@@ -4,6 +4,7 @@ import { buildServer } from "./server.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   const { server, matchManager, publisher } = await buildServer({
+    analyticsUrl: config.analyticsUrl,
     publisherOptions: {
       gamestatsUrl: config.gamestatsUrl,
       outboxPath: config.outboxPath,
