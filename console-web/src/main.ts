@@ -1,5 +1,7 @@
 import { ApiClient } from "./api/ApiClient.js";
+import { recordRecentMatch } from "./api/MatchHistory.js";
 import { ConsoleView } from "./ConsoleView.js";
+import { PanelView } from "./PanelView.js";
 import { ConnectFourView } from "./games/connect-four/ConnectFourView.js";
 import { SnakeView } from "./games/snake/SnakeView.js";
 import { MemoryView } from "./games/memory/MemoryView.js";
@@ -30,13 +32,11 @@ function render(route: Route): void {
       destroyCurrentView = () => view.destroy();
       break;
     }
-    case "panel":
-      appRoot.innerHTML = '<section class="page-heading"><p class="eyebrow">ANÁLISIS</p><h1>Panel</h1><p class="muted">Panel (pendiente)</p><a class="button button-quiet" href="/" data-back>← Volver a la consola</a></section>';
-      appRoot.querySelector("[data-back]")?.addEventListener("click", (event) => {
-        event.preventDefault();
-        router.navigate("/");
-      });
+    case "panel": {
+      const view = new PanelView(appRoot, api, (path) => router.navigate(path));
+      destroyCurrentView = () => view.destroy();
       break;
+    }
     case "play":
       renderMatch(route);
       break;
@@ -95,9 +95,7 @@ function renderMatch(route: Extract<Route, { kind: "play" }>): void {
       (path) => router.navigate(path),
       async () => {
         const match = await api.createMatch("snake-arena");
-        window.sessionStorage.setItem(`player:${match.matchId}`, match.playerId);
-        matchSocketManager.open(match.matchId, match.playerId);
-        router.navigate(`/play/${encodeURIComponent(match.gameId)}/${encodeURIComponent(match.matchId)}`);
+        startMatch(match);
       },
       spectator
     );
@@ -110,14 +108,23 @@ function renderMatch(route: Extract<Route, { kind: "play" }>): void {
       (path) => router.navigate(path),
       async () => {
         const match = await api.createMatch("memory-match");
-        window.sessionStorage.setItem(`player:${match.matchId}`, match.playerId);
-        matchSocketManager.open(match.matchId, match.playerId);
-        router.navigate(`/play/${encodeURIComponent(match.gameId)}/${encodeURIComponent(match.matchId)}`);
+        startMatch(match);
       },
       spectator
     );
     destroyCurrentView = () => view.destroy();
   }
+}
+
+function startMatch(match: Awaited<ReturnType<ApiClient["createMatch"]>>): void {
+  window.sessionStorage.setItem(`player:${match.matchId}`, match.playerId);
+  try {
+    recordRecentMatch(match);
+  } catch (error) {
+    console.error("[GameConsole] No se pudo guardar la partida para el panel de resultados:", error);
+  }
+  matchSocketManager.open(match.matchId, match.playerId);
+  router.navigate(`/play/${encodeURIComponent(match.gameId)}/${encodeURIComponent(match.matchId)}`);
 }
 
 function escapeHtml(value: string): string {

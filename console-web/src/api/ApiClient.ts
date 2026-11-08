@@ -19,6 +19,30 @@ export interface CreateMatchResponse {
   playerId: string;
 }
 
+export interface PlayerAnalysis {
+  playerId: string;
+  [key: string]: unknown;
+}
+
+export interface MatchAnalysis {
+  matchId: string;
+  gameId: string;
+  status: string;
+  complete: boolean;
+  players: PlayerAnalysis[];
+  [key: string]: unknown;
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export class ApiClient {
   private readonly fetcher: typeof fetch;
 
@@ -45,10 +69,17 @@ export class ApiClient {
     });
   }
 
+  public getMatchAnalysis(matchId: string, gameId: string): Promise<MatchAnalysis> {
+    const query = new URLSearchParams({ gameId });
+    return this.request<MatchAnalysis>(
+      `/api/analytics/matches/${encodeURIComponent(matchId)}?${query.toString()}`
+    );
+  }
+
   private async request<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await this.fetcher(url, init);
     if (!response.ok) {
-      throw new Error(`API respondió HTTP ${response.status} en ${url}`);
+      throw new ApiError(`API respondió HTTP ${response.status} en ${url}`, response.status);
     }
     return (await response.json()) as T;
   }

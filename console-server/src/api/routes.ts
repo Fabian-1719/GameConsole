@@ -22,7 +22,8 @@ interface CreateMatchBody {
 export function registerRoutes(
   server: FastifyInstance,
   registry: GameRegistry,
-  matchManager: MatchManager
+  matchManager: MatchManager,
+  analyticsUrl = process.env.ANALYTICS_URL || "http://localhost:8081"
 ): void {
   // GET / y GET /connect4 (Pagina minima de prueba HTML)
   const serveHtml = async (_req: FastifyRequest, reply: FastifyReply) => {
@@ -63,6 +64,36 @@ export function registerRoutes(
   server.get("/api/matches", async (_req: FastifyRequest, reply: FastifyReply) => {
     return reply.send(matchManager.listActive());
   });
+
+  server.get(
+    "/api/analytics/matches/:matchId",
+    async (
+      req: FastifyRequest<{
+        Params: { matchId: string };
+        Querystring: { gameId?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const target = new URL(
+        `/v1/matches/${encodeURIComponent(req.params.matchId)}`,
+        analyticsUrl
+      );
+      if (req.query.gameId) {
+        target.searchParams.set("gameId", req.query.gameId);
+      }
+
+      try {
+        const response = await fetch(target, { signal: AbortSignal.timeout(3000) });
+        const body = await response.text();
+        return reply
+          .status(response.status)
+          .type(response.headers.get("content-type") ?? "application/json")
+          .send(body);
+      } catch {
+        return reply.status(502).send({ error: "No se pudo consultar el servicio de analítica de GameStats" });
+      }
+    }
+  );
 
   // POST /api/matches
   server.post("/api/matches", async (req: FastifyRequest<{ Body: CreateMatchBody }>, reply: FastifyReply) => {

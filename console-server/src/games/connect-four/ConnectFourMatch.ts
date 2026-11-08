@@ -1,5 +1,5 @@
 ﻿import { Match, MatchOptions } from "../../core/Match.js";
-import { Board } from "./Board.js";
+import { Board, BoardPosition } from "./Board.js";
 import { PrologAiPlayer } from "../../ai/PrologAiPlayer.js";
 import { EventFactory } from "../../events/EventFactory.js";
 import { Player } from "../../core/Player.js";
@@ -19,6 +19,7 @@ export interface ConnectFourPublicState {
   level: number;
   movesCount: number;
   winnerId: string | null;
+  winningCells: BoardPosition[];
   humanPlayer?: { id: string; name: string };
   cpuPlayer?: { id: string; name: string };
 }
@@ -78,7 +79,7 @@ export class ConnectFourMatch extends Match {
 
     // Validar columna
     const col = (action as any)?.column;
-    if (typeof col !== "number" || col < 0 || col >= Board.COLS) {
+    if (typeof col !== "number" || !Number.isInteger(col) || col < 0 || col >= Board.COLS) {
       throw new Error(`Columna invalida: ${col}. Debe ser un entero entre 0 y 6.`);
     }
 
@@ -107,8 +108,7 @@ export class ConnectFourMatch extends Match {
     );
 
     // 2. Comprobar condicion de victoria del humano
-    const winner = this.board.findWinner();
-    if (winner === 1) {
+    if (this.board.hasConnectFourAt(dropResult.row, dropResult.column, 1)) {
       this.winnerId = human.id;
       this.emitEvent(
         EventFactory.create({
@@ -148,6 +148,9 @@ export class ConnectFourMatch extends Match {
       });
 
       // Validar que la columna devuelta por Prolog sea valida
+      if (!Number.isInteger(decision.column) || decision.column < 0 || decision.column >= Board.COLS) {
+        throw new Error(`Prolog devolvio una columna invalida (${decision.column})`);
+      }
       if (this.board.isColumnFull(decision.column)) {
         throw new Error(`Prolog devolvio una columna llena (${decision.column})`);
       }
@@ -193,10 +196,9 @@ export class ConnectFourMatch extends Match {
       );
 
       // Comprobar si la computadora gano
-      const winner = this.board.findWinner();
       const human = this.getHumanPlayer();
 
-      if (winner === 2) {
+      if (this.board.hasConnectFourAt(dropResult.row, dropResult.column, 2)) {
         this.winnerId = this.aiPlayer.id;
         if (human) {
           this.emitEvent(
@@ -242,12 +244,16 @@ export class ConnectFourMatch extends Match {
     winnerId: string | null = null,
     extraData: Record<string, unknown> = {}
   ): void {
-    super.finish(result, winnerId, { moves: this.movesCount, ...extraData });
+    this.finishWithFinalStateFirst(result, winnerId, { moves: this.movesCount, ...extraData });
   }
 
   public getPublicState(): ConnectFourPublicState {
     const human = this.getHumanPlayer();
     const currentTurnPlayerId = this.currentTurnDisc === 1 ? human?.id ?? "" : this.aiPlayer.id;
+    const winningDisc = this.winnerId === human?.id ? 1 : this.winnerId === this.aiPlayer.id ? 2 : undefined;
+    const winningCells = winningDisc === undefined
+      ? []
+      : this.board.findWinningLine(winningDisc)?.positions ?? [];
 
     return {
       matchId: this.matchId,
@@ -259,6 +265,7 @@ export class ConnectFourMatch extends Match {
       level: this.level,
       movesCount: this.movesCount,
       winnerId: this.winnerId,
+      winningCells,
       humanPlayer: human ? { id: human.id, name: human.name } : undefined,
       cpuPlayer: { id: this.aiPlayer.id, name: this.aiPlayer.name },
     };

@@ -1,10 +1,46 @@
-﻿import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import http from "node:http";
 import { ConnectFourMatch } from "../src/games/connect-four/ConnectFourMatch.js";
 import { HumanPlayer } from "../src/core/Player.js";
 import { GameEvent } from "../src/events/contract.js";
 
 describe("ConnectFourMatch (flujo de partida, eventos y turnos)", () => {
+  async function startPrologMock(columns: number[]): Promise<{
+    server: ReturnType<typeof http.createServer>;
+    url: string;
+  }> {
+    let decisionIndex = 0;
+    const server = http.createServer((req, res) => {
+      if (req.method !== "POST" || req.url !== "/decide") {
+        res.writeHead(404).end();
+        return;
+      }
+      req.resume();
+      req.on("end", () => {
+        const column = columns[decisionIndex++];
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ column, score: 0, nodes: 1, timeMs: 1, depthReached: 2 }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("No se pudo determinar el puerto del mock de Prolog");
+    }
+    return { server, url: `http://127.0.0.1:${address.port}` };
+  }
+
+  async function waitForTurnOrFinish(match: ConnectFourMatch): Promise<void> {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const state = match.getPublicState() as { currentTurnDisc: number };
+      if (match.status === "FINISHED" || state.currentTurnDisc === 1) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error("La IA no terminó su turno dentro del tiempo esperado");
+  }
+
   it("inicia partida, procesa turno humano y turno de IA con eventos conformes", async () => {
     // Mock de Prolog HTTP
     const mockPrologServer = http.createServer((req, res) => {
@@ -97,5 +133,87 @@ describe("ConnectFourMatch (flujo de partida, eventos y turnos)", () => {
     expect(match.status).toBe("FINISHED");
     const finishEvent = emittedEvents.find((e) => e.type === "MATCH_FINISHED");
     expect(finishEvent?.data.result).toBe("ABANDONED");
+  });
+
+  it("declara ganador humano solo al colocar la cuarta ficha y transmite el estado final antes de FINISHED", async () => {
+    const prolog = await startPrologMock([6, 6, 5]);
+    try {
+      const match = new ConnectFourMatch({ prologUrl: prolog.url });
+      const human = new HumanPlayer("p-human-win", "Jugador");
+      const emittedEvents: GameEvent[] = [];
+      const notifications: string[] = [];
+      let finalState: ReturnType<ConnectFourMatch["getPublicState"]> | undefined;
+      match.on("event", (event: GameEvent) => emittedEvents.push(event));
+      match.on("state", (state) => {
+        if ((state as { status?: string }).status === "FINISHED") {
+          finalState = state as ReturnType<ConnectFourMatch["getPublicState"]>;
+          notifications.push("state");
+        }
+      });
+      match.on("finished", () => notifications.push("finished"));
+      match.addPlayer(human);
+
+      for (const column of [0, 1, 2]) {
+        await match.handleAction(human.id, { column });
+        await waitForTurnOrFinish(match);
+      }
+      expect(match.status).toBe("RUNNING");
+
+      await match.handleAction(human.id, { column: 3 });
+
+      expect(match.status).toBe("FINISHED");
+      expect(emittedEvents.find((event) => event.type === "MATCH_FINISHED")?.data).toMatchObject({
+        result: "WIN",
+        winnerId: human.id,
+      });
+      expect(finalState?.winningCells).toHaveLength(4);
+      expect(notifications).toEqual(["state", "finished"]);
+    } finally {
+      await new Promise<void>((resolve) => prolog.server.close(() => resolve()));
+    }
+  });
+
+  it("muestra la ficha ganadora de la IA antes de anunciar que ganó", async () => {
+    const prolog = await startPrologMock([0, 1, 2, 3]);
+    try {
+      const match = new ConnectFourMatch({ prologUrl: prolog.url });
+      const human = new HumanPlayer("p-cpu-win", "Jugador");
+      const emittedEvents: GameEvent[] = [];
+      const notifications: string[] = [];
+      let finalState: ReturnType<ConnectFourMatch["getPublicState"]> | undefined;
+      match.on("event", (event: GameEvent) => emittedEvents.push(event));
+      match.on("state", (state) => {
+        if ((state as { status?: string }).status === "FINISHED") {
+          finalState = state as ReturnType<ConnectFourMatch["getPublicState"]>;
+          notifications.push("state");
+        }
+      });
+      match.on("finished", () => notifications.push("finished"));
+      match.addPlayer(human);
+
+      for (const column of [6, 6, 5, 5]) {
+        await match.handleAction(human.id, { column });
+        await waitForTurnOrFinish(match);
+        if (match.status === "RUNNING") {
+          expect(match.getBoard().findWinner()).toBeNull();
+        }
+      }
+
+      expect(match.status).toBe("FINISHED");
+      expect(emittedEvents.find((event) => event.type === "MATCH_FINISHED")?.data).toMatchObject({
+        result: "LOSS",
+        winnerId: "cpu-prolog",
+      });
+      expect(finalState?.board[5].slice(0, 4)).toEqual([2, 2, 2, 2]);
+      expect(finalState?.winningCells).toEqual([
+        { row: 5, column: 0 },
+        { row: 5, column: 1 },
+        { row: 5, column: 2 },
+        { row: 5, column: 3 },
+      ]);
+      expect(notifications).toEqual(["state", "finished"]);
+    } finally {
+      await new Promise<void>((resolve) => prolog.server.close(() => resolve()));
+    }
   });
 });

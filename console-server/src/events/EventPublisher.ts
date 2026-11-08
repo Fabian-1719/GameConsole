@@ -197,9 +197,7 @@ export class EventPublisher {
     } else {
       this.stats.batchesFailed++;
       this.stats.batchesOutboxed++;
-      if (this.logMetrics) {
-        console.warn(`[EventPublisher] Guardando en outbox lote de partida=${batch[0]?.matchId}`);
-      }
+      console.error(`[EventPublisher] Falló el envío; lote guardado en outbox: partida=${batch[0]?.matchId}`);
       await this.outbox.save(batch);
     }
   }
@@ -226,13 +224,32 @@ export class EventPublisher {
 
         clearTimeout(timeout);
 
-        // Aceptamos 200, 202 o 207 (Go ingestion responde 202 para aceptados)
+        if (res.status === 207) {
+          const result = (await res.json()) as {
+            accepted?: number;
+            rejected?: number;
+            errors?: Array<{ eventId?: string; reason?: string }>;
+          };
+          if (typeof result.rejected !== "number" || result.rejected > 0) {
+            console.error(
+              `[EventPublisher] GameStats rechazó eventos: aceptados=${result.accepted ?? "?"} ` +
+                `rechazados=${result.rejected ?? "?"} errores=${JSON.stringify(result.errors ?? [])}`
+            );
+            return false;
+          }
+        }
+
+        // Go responde 202 cuando acepta todos los eventos.
         if (res.status >= 200 && res.status < 300) {
           return true;
         }
 
         // 4xx no recuperable (salvo 429 Too Many Requests)
         if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+          const body = await res.text();
+          console.error(
+            `[EventPublisher] GameStats respondió HTTP ${res.status} para partida=${batch[0]?.matchId}: ${body}`
+          );
           return false;
         }
       } catch {

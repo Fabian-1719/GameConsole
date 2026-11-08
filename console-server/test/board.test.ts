@@ -88,4 +88,41 @@ describe("Reglas del Tablero de Cuatro en Línea (Board)", () => {
 
     expect(board.findWinner()).toBe(2);
   });
+
+  it("adjudica la victoria a la ficha recién colocada en las cuatro direcciones", () => {
+    const cases = [
+      { disc: 1 as const, cells: [[5, 0], [5, 1], [5, 2], [5, 3]], last: [5, 3] },
+      { disc: 2 as const, cells: [[2, 4], [3, 4], [4, 4], [5, 4]], last: [5, 4] },
+      { disc: 1 as const, cells: [[2, 0], [3, 1], [4, 2], [5, 3]], last: [5, 3] },
+      { disc: 2 as const, cells: [[5, 0], [4, 1], [3, 2], [2, 3]], last: [2, 3] },
+    ];
+
+    for (const { disc, cells, last } of cases) {
+      const grid = Array.from({ length: Board.ROWS }, () =>
+        Array.from({ length: Board.COLS }, () => 0 as Disc)
+      );
+      for (const [row, column] of cells) {
+        grid[row][column] = disc;
+      }
+      const board = new Board(grid);
+      expect(board.hasConnectFourAt(last[0], last[1], disc)).toBe(true);
+      expect(board.findWinningLine(disc)?.positions).toHaveLength(4);
+    }
+  });
+
+  it("no adjudica una línea que no incluye la última ficha", () => {
+    const grid = Array.from({ length: Board.ROWS }, () =>
+      Array.from({ length: Board.COLS }, () => 0 as Disc)
+    );
+    grid[5][0] = 1;
+    grid[5][1] = 1;
+    grid[5][2] = 1;
+    grid[5][3] = 1;
+    grid[5][6] = 2;
+
+    const board = new Board(grid);
+
+    expect(board.findWinner()).toBe(1);
+    expect(board.hasConnectFourAt(5, 6, 2)).toBe(false);
+  });
 });

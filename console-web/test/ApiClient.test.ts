@@ -36,6 +36,18 @@ describe("ApiClient", () => {
     });
   });
 
+  it("consulta el análisis de una partida usando el gameId", async () => {
+    const analysis = { matchId: "m/1", gameId: "snake-arena", complete: true, score: 30 };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(analysis));
+    const api = new ApiClient(fetcher);
+
+    await expect(api.getMatchAnalysis("m/1", "snake-arena")).resolves.toEqual(analysis);
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/analytics/matches/m%2F1?gameId=snake-arena",
+      undefined
+    );
+  });
+
   it("propaga errores HTTP", async () => {
     const api = new ApiClient(vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 })));
     await expect(api.getGames()).rejects.toThrow("HTTP 503");

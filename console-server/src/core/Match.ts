@@ -123,6 +123,23 @@ export abstract class Match extends EventEmitter {
     winnerId: string | null = null,
     extraData: Record<string, unknown> = {}
   ): void {
+    this.finishMatch(result, winnerId, extraData, false);
+  }
+
+  protected finishWithFinalStateFirst(
+    result: MatchResult,
+    winnerId: string | null = null,
+    extraData: Record<string, unknown> = {}
+  ): void {
+    this.finishMatch(result, winnerId, extraData, true);
+  }
+
+  private finishMatch(
+    result: MatchResult,
+    winnerId: string | null,
+    extraData: Record<string, unknown>,
+    finalStateFirst: boolean
+  ): void {
     if (this._status === "FINISHED") return;
     this._status = "FINISHED";
     this._finishedAt = new Date();
@@ -138,8 +155,13 @@ export abstract class Match extends EventEmitter {
       }, this.gameVersion)
     );
 
+    if (finalStateFirst) {
+      this.broadcastState();
+    }
     this.emit("finished", { result, winnerId, durationMs, extraData });
-    this.broadcastState();
+    if (!finalStateFirst) {
+      this.broadcastState();
+    }
   }
 
   public emitEvent(event: GameEvent): void {

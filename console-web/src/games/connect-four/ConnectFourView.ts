@@ -7,6 +7,7 @@ interface ConnectFourState {
   currentTurnDisc: number;
   level: number;
   movesCount: number;
+  winningCells?: Array<{ row: number; column: number }>;
 }
 
 export class ConnectFourView {
@@ -155,6 +156,7 @@ export class ConnectFourView {
         ? `Estado de la partida: ${state.status}.`
         : humanTurn ? "Tú juegas con rojo." : "Turno de la IA.";
     moves.textContent = `Jugadas: ${state.movesCount}`;
+    const winningCells = new Set((state.winningCells ?? []).map(({ row, column }) => `${row}:${column}`));
     board.innerHTML = `<div class="column-controls">${Array.from({ length: 7 }, (_, column) => `
       <button class="drop-button" data-column="${column}" aria-label="Jugar columna ${column + 1}"
         ${this.spectator || this.socketError || state.status !== "RUNNING" || !humanTurn || state.board[0]?.[column] !== 0 ? "disabled" : ""}>↓</button>
@@ -162,7 +164,8 @@ export class ConnectFourView {
     <div class="disc-grid">${state.board.map((row, rowIndex) => row.map((disc, column) => {
       const animate = lastDrop?.row === rowIndex && lastDrop.column === column;
       const style = animate ? ` style="--fall-rows:${lastDrop.row + 1}"` : "";
-      return `<span class="cell"><span class="disc ${disc === 1 ? "disc-human" : disc === 2 ? "disc-cpu" : ""}${animate ? " disc-falling" : ""}"${style}></span></span>`;
+      const winning = winningCells.has(`${rowIndex}:${column}`);
+      return `<span class="cell${winning ? " cell-winning" : ""}"><span class="disc ${disc === 1 ? "disc-human" : disc === 2 ? "disc-cpu" : ""}${animate ? " disc-falling" : ""}"${style}></span></span>`;
     }).join("")).join("")}</div>`;
     this.previousBoard = state.board.map((row) => [...row]);
   }
@@ -191,8 +194,8 @@ export class ConnectFourView {
   private renderFinished(message: MatchFinishedMessage): void {
     const result = String(message.result ?? "FINISHED");
     const labels: Record<string, string> = {
-      WIN: "¡Ganaste la partida!",
-      LOSS: "La computadora ganó la partida.",
+      WIN: "¡Conectaste cuatro en línea y ganaste!",
+      LOSS: "La computadora conectó cuatro en línea y ganó.",
       DRAW: "Partida terminada en empate.",
       ABANDONED: "Partida abandonada.",
     };
