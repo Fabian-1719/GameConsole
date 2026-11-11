@@ -81,17 +81,22 @@ export function registerRoutes(
       if (req.query.gameId) {
         target.searchParams.set("gameId", req.query.gameId);
       }
+      return forwardToAnalytics(target, reply);
+    }
+  );
 
-      try {
-        const response = await fetch(target, { signal: AbortSignal.timeout(3000) });
-        const body = await response.text();
-        return reply
-          .status(response.status)
-          .type(response.headers.get("content-type") ?? "application/json")
-          .send(body);
-      } catch {
-        return reply.status(502).send({ error: "No se pudo consultar el servicio de analítica de GameStats" });
-      }
+  // Panel: proxy SIN cálculo. Cada número sale de Scala (GameStats); aquí solo se reenvía.
+  // GET /api/stats/general -> GET /v1/stats/general
+  server.get("/api/stats/general", async (_req: FastifyRequest, reply: FastifyReply) => {
+    return forwardToAnalytics(new URL("/v1/stats/general", analyticsUrl), reply);
+  });
+
+  // GET /api/stats/games/:gameId -> GET /v1/games/:gameId/stats
+  server.get(
+    "/api/stats/games/:gameId",
+    async (req: FastifyRequest<{ Params: { gameId: string } }>, reply: FastifyReply) => {
+      const target = new URL(`/v1/games/${encodeURIComponent(req.params.gameId)}/stats`, analyticsUrl);
+      return forwardToAnalytics(target, reply);
     }
   );
 
@@ -198,6 +203,20 @@ export function registerRoutes(
     }
     return serveConsoleWeb(req, reply);
   });
+}
+
+/** Reenvía la consulta a Scala tal cual: mismo código HTTP y mismo cuerpo. Si Scala no responde, 502. */
+async function forwardToAnalytics(target: URL, reply: FastifyReply): Promise<FastifyReply> {
+  try {
+    const response = await fetch(target, { signal: AbortSignal.timeout(3000) });
+    const body = await response.text();
+    return reply
+      .status(response.status)
+      .type(response.headers.get("content-type") ?? "application/json")
+      .send(body);
+  } catch {
+    return reply.status(502).send({ error: "No se pudo consultar el servicio de analítica de GameStats" });
+  }
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

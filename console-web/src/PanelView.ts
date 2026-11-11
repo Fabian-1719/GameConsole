@@ -1,4 +1,8 @@
-import { ApiClient, ApiError, MatchAnalysis } from "./api/ApiClient.js";
+import { ApiClient, ApiError, Game, MatchAnalysis } from "./api/ApiClient.js";
+import { CONSOLE_GAMES, renderGame, renderGeneral } from "./panel/StatsRender.js";
+
+/** El enunciado pide actualización en vivo; la guía fija polling cada 2 segundos. */
+export const PANEL_REFRESH_MS = 2000;
 import {
   clearRecentMatches,
   isCurrentSessionMatch,
@@ -17,6 +21,8 @@ export class PanelView {
   private loading = false;
   private destroyed = false;
   private refreshVersion = 0;
+  private statsLoading = false;
+  private games: Game[] = [];
 
   constructor(
     private readonly root: HTMLElement,
@@ -26,11 +32,25 @@ export class PanelView {
     this.root.innerHTML = `
       <section class="page-heading">
         <p class="eyebrow">ANÁLISIS DE GAMESTATS</p>
-        <h1>Resultados</h1>
-        <p class="muted">Los resultados son históricos; no indican que una partida siga activa. Se guardan hasta 20 partidas en el almacenamiento local de este navegador y no se sincronizan con otros navegadores o perfiles.</p>
+        <h1>Panel de estadísticas</h1>
+        <p class="muted">Todos los números los calcula GameStats; la consola solo los muestra. Se actualiza cada 2 segundos, y cada partida aparece al terminar (GameStats la analiza cuando recibe MATCH_FINISHED).</p>
+        <p class="muted stats-updated" data-stats-updated aria-live="polite"></p>
         <a class="button button-quiet" href="/" data-back>← Volver a la consola</a>
       </section>
-      <section aria-labelledby="results-title">
+      <section class="stats-zone" aria-labelledby="general-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">TODOS LOS JUEGOS</p><h2 id="general-title">Generales</h2></div>
+        </div>
+        <div data-general-stats><p class="muted">Cargando estadísticas generales…</p></div>
+      </section>
+      <section class="stats-zone" aria-labelledby="per-game-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">UNO POR UNO</p><h2 id="per-game-title">Por juego</h2></div>
+        </div>
+        <div class="analytics-list" data-game-stats-list><p class="muted">Cargando estadísticas por juego…</p></div>
+        <p class="error-message" data-stats-error role="alert"></p>
+      </section>
+      <section class="stats-zone" aria-labelledby="results-title">
         <div class="section-heading">
           <div><p class="eyebrow">PARTIDAS DE ESTA PESTAÑA</p><h2 id="results-title">Sesión actual</h2></div>
         </div>
@@ -50,7 +70,45 @@ export class PanelView {
     this.root.querySelector("[data-back]")?.addEventListener("click", this.onBack);
     this.root.querySelector("[data-clear-history]")?.addEventListener("click", this.onClearHistory);
     void this.refresh();
-    this.timer = window.setInterval(() => void this.refresh(), 3000);
+    void this.refreshStats();
+    this.timer = window.setInterval(() => {
+      void this.refresh();
+      void this.refreshStats();
+    }, PANEL_REFRESH_MS);
+  }
+
+  /** Pide a GameStats (vía el proxy /api/stats/*) los resúmenes y los dibuja. Nada se calcula aquí. */
+  private async refreshStats(): Promise<void> {
+    if (this.statsLoading || this.destroyed) {
+      return;
+    }
+    this.statsLoading = true;
+    const error = this.root.querySelector<HTMLElement>("[data-stats-error]");
+    try {
+      if (this.games.length === 0) {
+        this.games = await this.api.getGames().catch(() => []);
+      }
+      const [general, ...perGame] = await Promise.all([
+        this.api.getGeneralStats(),
+        ...CONSOLE_GAMES.map((gameId) => this.api.getGameStats(gameId)),
+      ]);
+      if (this.destroyed) {
+        return;
+      }
+      const generalTarget = this.root.querySelector<HTMLElement>("[data-general-stats]");
+      const gamesTarget = this.root.querySelector<HTMLElement>("[data-game-stats-list]");
+      const updated = this.root.querySelector<HTMLElement>("[data-stats-updated]");
+      if (generalTarget) generalTarget.innerHTML = renderGeneral(general, this.games);
+      if (gamesTarget) gamesTarget.innerHTML = perGame.map((stats) => renderGame(stats, this.games)).join("");
+      if (updated) updated.textContent = `Última actualización: ${new Date().toLocaleTimeString()}`;
+      if (error) error.textContent = "";
+    } catch (failure) {
+      if (!this.destroyed && error) {
+        error.textContent = `No se pudo consultar GameStats: ${errorMessage(failure)}. Se reintentará en 2 s.`;
+      }
+    } finally {
+      this.statsLoading = false;
+    }
   }
 
   public destroy(): void {
