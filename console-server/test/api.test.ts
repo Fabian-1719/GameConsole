@@ -128,6 +128,57 @@ describe("API REST de console-server", () => {
     }
   });
 
+  it("GET /api/stats/* reenvía a Scala sin modificar la respuesta", async () => {
+    const general = { totalMatches: 4, matchesByGame: { "connect-four": 2 } };
+    const gameStats = { gameId: "snake-arena", instances: 3 };
+    const requested: string[] = [];
+    const analyticsServer = http.createServer((request, response) => {
+      requested.push(request.url ?? "");
+      if (request.url === "/v1/stats/general") {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(general));
+      } else if (request.url === "/v1/games/snake-arena/stats") {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(gameStats));
+      } else {
+        response.writeHead(404, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ error: "unknown gameId: tetris" }));
+      }
+    });
+    await new Promise<void>((resolve) => analyticsServer.listen(0, resolve));
+    const port = (analyticsServer.address() as { port: number }).port;
+    const app = await buildServer({ analyticsUrl: `http://127.0.0.1:${port}` });
+
+    try {
+      const generalRes = await app.server.inject({ method: "GET", url: "/api/stats/general" });
+      expect(generalRes.statusCode).toBe(200);
+      expect(generalRes.json()).toEqual(general);
+
+      const gameRes = await app.server.inject({ method: "GET", url: "/api/stats/games/snake-arena" });
+      expect(gameRes.statusCode).toBe(200);
+      expect(gameRes.json()).toEqual(gameStats);
+
+      const unknownRes = await app.server.inject({ method: "GET", url: "/api/stats/games/tetris" });
+      expect(unknownRes.statusCode).toBe(404);
+
+      expect(requested).toEqual(["/v1/stats/general", "/v1/games/snake-arena/stats", "/v1/games/tetris/stats"]);
+    } finally {
+      await app.server.close();
+      await new Promise<void>((resolve) => analyticsServer.close(() => resolve()));
+    }
+  });
+
+  it("GET /api/stats/general informa si GameStats no está disponible", async () => {
+    const app = await buildServer({ analyticsUrl: "http://127.0.0.1:1" });
+    try {
+      const response = await app.server.inject({ method: "GET", url: "/api/stats/general" });
+      expect(response.statusCode).toBe(502);
+      expect(response.json().error).toContain("GameStats");
+    } finally {
+      await app.server.close();
+    }
+  });
+
   it("GET /api/analytics/matches/:id informa si GameStats no está disponible", async () => {
     const app = await buildServer({ analyticsUrl: "http://127.0.0.1:1" });
     try {

@@ -33,6 +33,31 @@ export interface MatchAnalysis {
   [key: string]: unknown;
 }
 
+/** Respuesta de GET /v1/stats/general (Scala). La consola no calcula nada de esto. */
+export interface GeneralStats {
+  totalMatches: number;
+  completedMatches: number;
+  abandonedMatches: number;
+  matchesByGame: Record<string, number>;
+  players: number;
+  events: number;
+}
+
+/** Respuesta de GET /v1/games/{gameId}/stats (Scala). */
+export interface GameStats {
+  gameId: string;
+  instances: number;
+  completed: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  abandoned: number;
+  avgDurationMs: number | null;
+  players: number;
+  patterns: Record<string, number>;
+  metrics: Record<string, unknown>;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -74,6 +99,14 @@ export class ApiClient {
     return this.request<MatchAnalysis>(
       `/api/analytics/matches/${encodeURIComponent(matchId)}?${query.toString()}`
     );
+  }
+
+  public getGeneralStats(): Promise<GeneralStats> {
+    return this.request<GeneralStats>("/api/stats/general");
+  }
+
+  public getGameStats(gameId: string): Promise<GameStats> {
+    return this.request<GameStats>(`/api/stats/games/${encodeURIComponent(gameId)}`);
   }
 
   private async request<T>(url: string, init?: RequestInit): Promise<T> {
