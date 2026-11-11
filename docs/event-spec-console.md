@@ -4,7 +4,7 @@ Estado: **Contrato integrado y cubierto por pruebas con el catálogo real de Go*
 
 Este documento define el formato estándar de eventos emitidos por `console-server` hacia la plataforma `GameStats` (Go/Scala), garantizando compatibilidad con el validador estricto y el catálogo de Go.
 
-GameStats mantiene el catálogo en `go-ingestion/config/catalog.json` y calcula los análisis de `connect-four`, `snake-arena` y `memory-match` en Scala. GameConsole consulta el resultado por `GET /api/analytics/matches/:matchId?gameId=:gameId`; el servidor lo reenvía a `GET /v1/matches/:matchId` en Scala. El panel actualiza las partidas recientes mientras Go termina de agrupar y enviar cada partida.
+GameStats mantiene el catálogo en `go-ingestion/config/catalog.json` y calcula los análisis de `connect-four`, `snake-arena` y `memory-match` en Scala. GameConsole consulta el resultado por `GET /api/analytics/matches/:matchId?gameId=:gameId`; el servidor lo reenvía a `GET /v1/matches/:matchId` en Scala. El panel muestra además las estadísticas generales y por juego mediante `GET /api/stats/general` y `GET /api/stats/games/:gameId`, que el servidor reenvía sin cálculo a `GET /v1/stats/general` y `GET /v1/games/:gameId/stats`. El detalle de las estadísticas y los patrones está en [statistics.md](statistics.md).
 
 ---
 
@@ -56,12 +56,12 @@ Cada hecho ocurrido dentro de una partida se emite como un objeto JSON con la si
 - **`PLAYER_LOST`**: data: `{ "playerId": string }`
 - **`MATCH_FINISHED`**: data: `{ "winnerId": string | null, "result": string, "durationMs": number, "moves": number }`
 
-### 2.3 `snake-arena` (especificación de contrato para extensión futura)
+### 2.3 `snake-arena`
 - **`FOOD_EATEN`**: data: `{ "score": number, "length": number }`
 - **`PLAYER_DIED`**: data: `{ "cause": "WALL" | "SELF", "score": number }`
 - **`MATCH_FINISHED`**: data: `{ "winnerId": string | null, "result": string, "durationMs": number, "score": number, "length": number }`
 
-### 2.4 `memory-match` (especificación de contrato para extensión futura)
+### 2.4 `memory-match`
 - **`CARD_FLIPPED`**: data: `{ "cardIndex": number }`
 - **`PAIR_MATCHED`**: data: `{ "pairId": string, "attempts": number }`
 - **`PAIR_MISSED`**: data: `{ "attempts": number }`
