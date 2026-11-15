@@ -1,0 +1,7 @@
+node_modules
+dist
+.git
+*.ndjson
+.env
+.env.local
+coverage

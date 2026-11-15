@@ -1,0 +1,126 @@
+name: gameconsole
+
+services:
+  # -------------------------------------------------------------
+  # GameStats - Módulo de Analítica y Estadísticas (Scala)
+  # -------------------------------------------------------------
+  gamestats-scala:
+    image: ${GAMESTATS_SCALA_IMAGE:-ghcr.io/fabian-1719/gamestats-scala:latest}
+    ports:
+      - "${GAMESTATS_SCALA_PORT:-8081}:8081"
+    environment:
+      PORT: "8081"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # -------------------------------------------------------------
+  # GameStats - Servicio de Ingestión y Validación (Go)
+  # -------------------------------------------------------------
+  gamestats-go:
+    image: ${GAMESTATS_GO_IMAGE:-ghcr.io/fabian-1719/gamestats-go:latest}
+    depends_on:
+      gamestats-scala:
+        condition: service_healthy
+    ports:
+      - "${GAMESTATS_GO_PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      SCALA_URL: http://gamestats-scala:8081
+      REJECTED_PATH: /app/data/rejected.ndjson
+      CATALOG_PATH: /app/config/catalog.json
+      FAILED_BATCH_DIR: /app/failed-batches
+    volumes:
+      - gamestats-data:/app/data
+      - gamestats-failed-batches:/app/failed-batches
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # -------------------------------------------------------------
+  # Motor de Inteligencia Artificial (SWI-Prolog HTTP)
+  # -------------------------------------------------------------
+  prolog-ai:
+    image: ${PROLOG_IMAGE:-gameconsole-prolog:latest}
+    build:
+      context: ./prolog-ai
+      dockerfile: Dockerfile
+    environment:
+      PORT: "5000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:5000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # -------------------------------------------------------------
+  # Servidor Backend POO y Publicador de Eventos (TypeScript/Node)
+  # -------------------------------------------------------------
+  console-server:
+    image: ${CONSOLE_IMAGE:-gameconsole-server:latest}
+    build:
+      context: ./console-server
+      dockerfile: Dockerfile
+    depends_on:
+      prolog-ai:
+        condition: service_healthy
+      gamestats-go:
+        condition: service_healthy
+      gamestats-scala:
+        condition: service_healthy
+    environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      GAMESTATS_URL: ${GAMESTATS_URL:-http://gamestats-go:8080}
+      ANALYTICS_URL: ${ANALYTICS_URL:-http://gamestats-scala:8081}
+      PROLOG_URL: ${PROLOG_URL:-http://prolog-ai:5000}
+      OUTBOX_PATH: ${OUTBOX_PATH:-/data/outbox.ndjson}
+      PUBLISHER_WORKERS: ${PUBLISHER_WORKERS:-4}
+    volumes:
+      - console-outbox:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # -------------------------------------------------------------
+  # Consola Web y Panel de Estadísticas (Vite + Nginx Reverse Proxy)
+  # -------------------------------------------------------------
+  console-web:
+    image: ${CONSOLE_WEB_IMAGE:-gameconsole-web:latest}
+    build:
+      context: ./console-web
+      dockerfile: Dockerfile
+    depends_on:
+      console-server:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  console-outbox:
+    name: gameconsole_outbox
+  gamestats-data:
+    name: gamestats_data
+  gamestats-failed-batches:
+    name: gamestats_failed_batches
