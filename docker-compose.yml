@@ -5,7 +5,7 @@ services:
   # GameStats - Módulo de Analítica y Estadísticas (Scala)
   # -------------------------------------------------------------
   gamestats-scala:
-    image: ${GAMESTATS_SCALA_IMAGE:-ghcr.io/fabian-1719/gamestats-scala:latest}
+    image: ${GAMESTATS_SCALA_IMAGE:-ghcr.io/fabian-1719/gamestats-scala-analytics:latest}
     ports:
       - "${GAMESTATS_SCALA_PORT:-8081}:8081"
     environment:
@@ -22,7 +22,7 @@ services:
   # GameStats - Servicio de Ingestión y Validación (Go)
   # -------------------------------------------------------------
   gamestats-go:
-    image: ${GAMESTATS_GO_IMAGE:-ghcr.io/fabian-1719/gamestats-go:latest}
+    image: ${GAMESTATS_GO_IMAGE:-ghcr.io/fabian-1719/gamestats-go-ingestion:latest}
     depends_on:
       gamestats-scala:
         condition: service_healthy
