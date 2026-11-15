@@ -16,3 +16,4 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:${PORT}/health || exit 1
 
 ENTRYPOINT ["swipl", "-s", "server.pl"]
+CMD ["-g", "server"]
