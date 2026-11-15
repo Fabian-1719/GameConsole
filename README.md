@@ -1,146 +1,182 @@
 # GameConsole
 
-Plataforma de videojuegos orientada a objetos con inteligencia de juego en Prolog, integrada con la plataforma GameStats para ingestión concurrente y análisis estadístico funcional.
+Plataforma de videojuegos orientada a objetos con inteligencia artificial en Prolog, integrada con la plataforma **GameStats** (Go + Scala) para ingestión concurrente, validación de esquemas y análisis estadístico funcional.
 
 ---
 
-## Arquitectura
+## 1. Arquitectura General
 
 ```
-Navegador (connect4-test.html / Consola Web)
-      │  WebSocket / REST
-      ▼
-console-server (TypeScript POO: Game, Match, Player)  ──HTTP──►  prolog-ai (SWI-Prolog: Minimax)
-      │  EventPublisher (colas por partida, lotes, outbox)
-      ▼  POST /v1/events
-GameStats (Go Ingestion puerto 8080 ──► Scala Analytics puerto 8081)
+Navegador (Consola Web SPA Vanilla TS / Panel)
+        │  HTTPS (:443) / WSS
+        ▼
+   [ Caddy Reverse Proxy ]
+        │  HTTP / WS
+        ▼
+   [ console-web ] (Nginx: SPA History API + Enrutamiento)
+        │  Proxy interno
+        ▼
+   [ console-server ] (TypeScript POO: Fastify, WebSockets)
+        ├───► [ prolog-ai ] (SWI-Prolog HTTP :5000: Minimax con Poda Alfa-Beta)
+        │
+        └───► [ EventPublisher ] (Colas por partida, lotes, pool de workers)
+                 │  POST /v1/events
+                 ▼
+              GameStats (Go Ingestión :8080 ──► Scala Analítica :8081)
 ```
 
-## Estructura del repositorio
+Para más detalles sobre el modelo de concurrencia, aislamiento de partidas y el algoritmo de poda alfa-beta, consulta la [Guía de Arquitectura](docs/architecture.md).
 
-- **`console-server/`**: Servidor de videojuegos orientado a objetos desarrollado en TypeScript (Node 20, Fastify, WebSocket).
-- **`console-web/`**: Aplicación web vanilla en TypeScript, servida en desarrollo por Vite y en producción por `console-server`.
-- **`prolog-ai/`**: Servicio independiente de inteligencia artificial en SWI-Prolog (Minimax con poda alfa-beta para Cuatro en Línea).
-- **`docs/`**: Documentación técnica:
-  - `docs/handoff.md`: Documento de traspaso detallado y guía para agregar nuevos juegos.
-  - `docs/event-spec-console.md`: Especificación técnica del contrato de eventos con GameStats.
-  - `docs/deployment.md`: Guía de despliegue en producción con Caddy, Docker Compose y CI/CD.
-  - `docs/decisions.md`: Registro de decisiones arquitectónicas (ADRs).
+---
 
-## Requisitos previos
+## 2. Estructura del Repositorio y Documentación
 
-- Node.js >= 20 y npm >= 10
-- SWI-Prolog >= 9 (o Docker)
-- Docker Compose v2 (para iniciar GameStats Go y Scala)
+- **`console-server/`**: Servidor de videojuegos orientado a objetos en TypeScript (Node 20, Fastify, WebSocket).
+- **`console-web/`**: Aplicación web frontend (Vanilla TypeScript, Vite, CSS moderno) con selector de juegos, pestañas múltiples y panel de analítica.
+- **`prolog-ai/`**: Motor de razonamiento lógico e inteligencia artificial en SWI-Prolog con servidor HTTP integrado.
+- **`deploy/`**: Archivos de infraestructura para producción (`Caddyfile`, `deploy.sh`).
+- **`scripts/`**: Scripts de automatización y verificación (`smoke-test.mjs`, `load-test.mjs`, `verify-gamestats-contract.ts`).
+- **`docs/`**: Documentación técnica detallada:
+  - [Guía de Arquitectura](docs/architecture.md): Diagrama de componentes, envío concurrente y diseño de la IA.
+  - [Guía de Despliegue](docs/deployment.md): Despliegue en VPS, Caddy HTTPS, variables y rollback.
+  - [Especificación de Eventos](docs/event-spec-console.md): Contrato estricto de eventos con GameStats.
+  - [Documentación de Juegos](docs/games.md): Reglas, estados y diseño POO de Cuatro en Línea, Snake y Memoria.
+  - [Motor Prolog AI](docs/prolog-ai.md): Algoritmo Minimax, heurística posicional y poda alfa-beta.
+  - [Estadísticas y Panel](docs/statistics.md): Integración con los endpoints funcionales de Scala.
+  - [Documento de Traspaso](docs/handoff.md): Resumen de fases iniciales y guía de extensibilidad.
+  - [Registro de Decisiones (ADR)](docs/decisions.md): Decisiones arquitectónicas registradas (ADR-001 a ADR-014).
 
-## Ejecución con Docker Compose
+---
 
-La plataforma completa (GameConsole Web + Backend + Prolog AI + GameStats Go + GameStats Scala) puede orquestarse con Docker Compose desde un clon limpio:
+## 3. Requisitos Previos
+
+- **Node.js** >= 20 y **npm** >= 10
+- **Docker** y **Docker Compose** v2 (para orquestación local o en servidor)
+- **SWI-Prolog** >= 9 (opcional, solo para ejecutar Prolog directamente sin Docker)
+
+---
+
+## 4. Variables de Entorno
+
+Configurables a través de un archivo `.env` en la raíz (generado a partir de `.env.example`):
+
+| Variable | Descripción | Valor por Defecto |
+|---|---|---|
+| `PORT` | Puerto público expuesto por la consola web | `3000` |
+| `HOST` | Interfaz de escucha del servidor | `0.0.0.0` |
+| `GAMESTATS_URL` | URL de ingestión de eventos (Go) | `http://gamestats-go:8080` |
+| `ANALYTICS_URL` | URL del servicio de analítica (Scala) | `http://gamestats-scala:8081` |
+| `PROLOG_URL` | URL del servicio de IA en Prolog | `http://prolog-ai:5000` |
+| `PUBLISHER_WORKERS` | Número de workers concurrentes en el pool de envío | `4` |
+| `OUTBOX_PATH` | Ruta del archivo de persistencia en disco del outbox | `/data/outbox.ndjson` |
+| `GAMESTATS_GO_IMAGE` | Imagen de Go en GitHub Container Registry (GHCR) | `ghcr.io/fabian-1719/gamestats-go-ingestion:latest` |
+| `GAMESTATS_SCALA_IMAGE`| Imagen de Scala en GHCR | `ghcr.io/fabian-1719/gamestats-scala-analytics:latest` |
+| `CONSOLE_IMAGE` | Imagen del backend en GHCR | `ghcr.io/fabian-1719/gameconsole-server:latest` |
+| `CONSOLE_WEB_IMAGE` | Imagen del frontend en GHCR | `ghcr.io/fabian-1719/gameconsole-web:latest` |
+| `PROLOG_IMAGE` | Imagen de Prolog en GHCR | `ghcr.io/fabian-1719/gameconsole-prolog:latest` |
+
+---
+
+## 5. Ejecución con Docker Compose (Recomendado)
+
+Desde un clon limpio del repositorio, puedes levantar la plataforma completa con un único comando:
 
 ```bash
-# 1. Configurar variables de entorno (usar valores de ejemplo)
+# 1. Crear el archivo .env con valores de ejemplo
 cp .env.example .env
 
-# 2. Construir e iniciar todos los servicios
+# 2. Levantar todos los servicios en segundo plano
 docker compose up -d --build
 
-# 3. Comprobar que todos los servicios queden en estado healthy
+# 3. Comprobar que todos los servicios queden en estado HEALTHY
 docker compose ps
 ```
 
-Endpoints y servicios:
+### Servicios Disponibles:
 - **Consola Web y Panel:** [http://localhost:3000](http://localhost:3000)
 - **GameStats Ingestión (Go):** [http://localhost:8080/health](http://localhost:8080/health)
 - **GameStats Analítica (Scala):** [http://localhost:8081/health](http://localhost:8081/health)
-- **Motor Prolog AI:** `http://localhost:5000/health` (interno)
+- **Motor Prolog AI:** `http://localhost:5000/health` (red interna)
 
-Para reiniciar el servidor manteniendo el outbox persistente:
+### Reinicio con Persistencia:
+Para reiniciar el servidor conservando el outbox y los datos acumulados:
 ```bash
 docker compose restart console-server
 ```
 
-Para apagar la infraestructura:
+Para detener la infraestructura:
 ```bash
 docker compose down
 ```
 
 ---
 
-## Ejecución local paso a paso
+## 6. Ejecución Local en Modo Desarrollo
 
-### 1. Iniciar GameStats (repo separado)
-```powershell
-Set-Location C:\GameStats
-docker compose up --build -d scala-analytics go-ingestion
-```
-Go recibe eventos en `http://localhost:8080` y Scala ofrece análisis en `http://localhost:8081`.
-Configura `GAMESTATS_URL=http://localhost:8080` y `ANALYTICS_URL=http://localhost:8081` en el entorno de GameConsole.
+Si deseas desarrollar o probar componentes de forma individual:
 
-### 2. Iniciar el servicio Prolog AI
+### 1. Iniciar el Servicio Prolog AI
 ```bash
-cd gameconsole/prolog-ai
-swipl -q -s server.pl -g "server:server"
+cd prolog-ai
+swipl -s server.pl -g server
+# Escuchando en http://localhost:5000
 ```
-*O utilizando Docker:*
-```bash
-cd gameconsole/prolog-ai
-docker build -t prolog-ai .
-docker run -p 5000:5000 prolog-ai
-```
-*El servicio escuchará en `http://localhost:5000`.*
 
-### 3. Iniciar GameConsole Server
+### 2. Iniciar el Backend (Console Server)
 ```bash
-cd gameconsole/console-server
+cd console-server
 npm install
 npm run dev
+# Escuchando en http://localhost:3000
 ```
-*El servidor escuchará en `http://localhost:3000`.*
 
-### 4. Jugar Cuatro en Línea
-Abre tu navegador web en:
-```
-http://localhost:3000/
-```
-También puedes correr la interfaz en modo desarrollo con el proxy a `console-server`:
+### 3. Iniciar el Frontend (Console Web)
 ```bash
-cd gameconsole/console-web
+cd console-web
 npm install
 npm run dev
-# http://localhost:5173
+# Servidor de desarrollo Vite en http://localhost:5173 con proxy a :3000
 ```
-Para producción, ejecuta `npm run build` en `console-web`; `console-server` servirá
-`console-web/dist` en `/`. La página de prueba anterior se conserva en `/connect4`.
-
-El panel `/panel` separa las partidas creadas desde la pestaña actual del historial anterior y muestra hasta 20 resultados guardados en el almacenamiento local de ese navegador. Ese historial no se sincroniza entre navegadores ni perfiles; borrarlo desde el panel solo quita la lista local, no los análisis en GameStats. La consulta recorre GameConsole → API de Scala; Go valida e ingiere los eventos y envía cada partida finalizada a Scala para analizarla. La analítica de GameStats actualmente vive en memoria, por lo que reiniciar esos servicios borra los análisis.
-
-Con ambos servicios de GameStats activos, verifica el recorrido completo desde `console-server`:
-```powershell
-npx tsx ..\scripts\verify-gamestats-contract.ts
-```
-El script envía eventos válidos de los tres juegos, comprueba los contadores de rechazo de Go y valida las métricas que devuelve Scala.
 
 ---
 
-## Ejecución de Pruebas
+## 7. Ejecución de Pruebas
 
 ### Pruebas de Console Server (TypeScript / Vitest)
 ```bash
-cd gameconsole/console-server
-npm test
-```
-*Ejecuta pruebas automáticas de reglas, colas/outbox, conformidad del publicador, API REST, juegos y E2E contra Prolog.*
-
-### Pruebas de Console Web (TypeScript / Vitest)
-```bash
-cd gameconsole/console-web
+cd console-server
+npm run lint
 npm test
 npm run build
 ```
 
-### Pruebas de Prolog AI (plunit)
+### Pruebas de Console Web (TypeScript / Vitest)
 ```bash
-cd gameconsole/prolog-ai
+cd console-web
+npm run lint
+npm test
+npm run build
+```
+
+### Pruebas del Motor Prolog AI (plunit)
+```bash
+cd prolog-ai
 swipl -g "run_tests,halt" -s tests/connect4_tests.pl
 ```
-*Valida toma de victoria inmediata, bloqueo de rival, columnas llenas y aumento de nodos explorados por profundidad.*
+
+### Smoke Test de Integración
+Con la plataforma en ejecución (local o Docker Compose):
+```bash
+node scripts/smoke-test.mjs
+```
+
+---
+
+## 8. Despliegue en Producción
+
+El proyecto incluye configuración lista para despliegue automático vía GitHub Actions en un servidor VPS con Caddy (HTTPS automático con Let's Encrypt y WebSockets):
+- Configuración de producción: `docker-compose.prod.yml`
+- Proxy inverso: `deploy/Caddyfile`
+- Script de actualización y rollback: `deploy/deploy.sh`
+
+Consulta la [Guía de Despliegue](docs/deployment.md) para conocer los secretos de GitHub requeridos y el procedimiento de puesta en marcha.
