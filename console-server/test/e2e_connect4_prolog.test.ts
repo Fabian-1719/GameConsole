@@ -1,8 +1,22 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { ConnectFourMatch } from "../src/games/connect-four/ConnectFourMatch.js";
 import { HumanPlayer } from "../src/core/Player.js";
 import { GameEvent } from "../src/events/contract.js";
+
+function resolveSwiplCommand(): string {
+  if (process.env.SWIPL_PATH) {
+    return process.env.SWIPL_PATH;
+  }
+  if (process.platform === "win32") {
+    const defaultWinPath = "C:\\Program Files\\swipl\\bin\\swipl.exe";
+    if (existsSync(defaultWinPath)) {
+      return defaultWinPath;
+    }
+  }
+  return "swipl";
+}
 
 describe("E2E Connect Four contra servidor Prolog real", () => {
   let prologProcess: ChildProcess;
@@ -10,8 +24,9 @@ describe("E2E Connect Four contra servidor Prolog real", () => {
 
   beforeAll(async () => {
     // Iniciar servidor Prolog real en puerto 5055
+    const swiplBinary = resolveSwiplCommand();
     prologProcess = spawn(
-      "C:\\Program Files\\swipl\\bin\\swipl.exe",
+      swiplBinary,
       ["-s", "server.pl", "-g", `server(${prologPort})`],
       {
         cwd: "../prolog-ai",

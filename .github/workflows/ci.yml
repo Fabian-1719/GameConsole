@@ -30,6 +30,11 @@ jobs:
             console-server/package-lock.json
             console-web/package-lock.json
 
+      - name: Install SWI-Prolog on runner
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends swi-prolog
+
       - name: Install dependencies (console-server)
         working-directory: console-server
         run: npm ci
