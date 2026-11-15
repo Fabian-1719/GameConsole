@@ -32,6 +32,37 @@ GameStats (Go Ingestion puerto 8080 ──► Scala Analytics puerto 8081)
 - SWI-Prolog >= 9 (o Docker)
 - Docker Compose v2 (para iniciar GameStats Go y Scala)
 
+## Ejecución con Docker Compose
+
+La plataforma completa (GameConsole Web + Backend + Prolog AI + GameStats Go + GameStats Scala) puede orquestarse con Docker Compose desde un clon limpio:
+
+```bash
+# 1. Configurar variables de entorno (usar valores de ejemplo)
+cp .env.example .env
+
+# 2. Construir e iniciar todos los servicios
+docker compose up -d --build
+
+# 3. Comprobar que todos los servicios queden en estado healthy
+docker compose ps
+```
+
+Endpoints y servicios:
+- **Consola Web y Panel:** [http://localhost:3000](http://localhost:3000)
+- **GameStats Ingestión (Go):** [http://localhost:8080/health](http://localhost:8080/health)
+- **GameStats Analítica (Scala):** [http://localhost:8081/health](http://localhost:8081/health)
+- **Motor Prolog AI:** `http://localhost:5000/health` (interno)
+
+Para reiniciar el servidor manteniendo el outbox persistente:
+```bash
+docker compose restart console-server
+```
+
+Para apagar la infraestructura:
+```bash
+docker compose down
+```
+
 ---
 
 ## Ejecución local paso a paso
