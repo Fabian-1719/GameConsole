@@ -1,4 +1,4 @@
-﻿# Registro de decisiones de arquitectura (ADR)
+# Registro de decisiones de arquitectura (ADR)
 
 Este documento registra las decisiones tomadas durante el desarrollo de GameConsole.
 
@@ -17,3 +17,4 @@ Este documento registra las decisiones tomadas durante el desarrollo de GameCons
 | ADR-011 | 2026-11-15 | Contenedor web con Nginx multi-stage (`console-web`) y proxy reverso hacia `console-server`. | Sirve la SPA con fallback a `index.html`, y enruta `/api/` y `/ws/` con soporte completo de WebSockets. |
 | ADR-012 | 2026-11-15 | Orquestación en Docker Compose con `depends_on: service_healthy` en cadena lógica. | Asegura que Prolog y GameStats estén listos antes de levantar la consola y su interfaz web. |
 | ADR-013 | 2026-11-15 | Volúmenes con nombre persistentes para el outbox (`gameconsole_outbox`) y GameStats (`gamestats_data`). | Garantiza persistencia de eventos ante reinicios y previene pérdida de datos. |
+| ADR-014 | 2026-11-15 | Despliegue en VPS con Docker Compose, proxy Caddy para HTTPS/WSS y rollback en `deploy.sh`. | Simplifica la arquitectura reutilizando Compose, automatiza certificados SSL y asegura alta disponibilidad. |
