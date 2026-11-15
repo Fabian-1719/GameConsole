@@ -200,14 +200,35 @@ jobs:
         run: docker compose down -v
 
   # -------------------------------------------------------------
-  # Job 5: Despliegue Automático (Deshabilitado hasta Fase 3)
+  # Job 5: Despliegue Automático en VPS de Producción
   # -------------------------------------------------------------
   deploy:
-    name: Deploy to Server
+    name: Deploy to Production VPS
     needs: [images, smoke]
-    # Se activará en Fase 3 cuando el servidor esté configurado
-    if: false
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.DEPLOY_HOST != ''
     runs-on: ubuntu-latest
     steps:
-      - name: Placeholder de despliegue (Fase 3)
-        run: echo "El despliegue automático se activará en la Fase 3 tras configurar los secretos del VPS."
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Copy deployment files via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "docker-compose.yml,docker-compose.prod.yml,deploy/*"
+          target: ${{ secrets.DEPLOY_PATH || '/opt/gameconsole' }}
+
+      - name: Execute remote deploy script via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: DEPLOY_PATH,DEPLOY_DOMAIN
+          script: |
+            export DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/opt/gameconsole' }}"
+            export DEPLOY_DOMAIN="${{ secrets.DEPLOY_DOMAIN || '' }}"
+            chmod +x "${DEPLOY_PATH}/deploy/deploy.sh"
+            bash "${DEPLOY_PATH}/deploy/deploy.sh"

@@ -1,4 +1,4 @@
-﻿# GameConsole
+# GameConsole
 
 Plataforma de videojuegos orientada a objetos con inteligencia de juego en Prolog, integrada con la plataforma GameStats para ingestión concurrente y análisis estadístico funcional.
 
@@ -24,6 +24,7 @@ GameStats (Go Ingestion puerto 8080 ──► Scala Analytics puerto 8081)
 - **`docs/`**: Documentación técnica:
   - `docs/handoff.md`: Documento de traspaso detallado y guía para agregar nuevos juegos.
   - `docs/event-spec-console.md`: Especificación técnica del contrato de eventos con GameStats.
+  - `docs/deployment.md`: Guía de despliegue en producción con Caddy, Docker Compose y CI/CD.
   - `docs/decisions.md`: Registro de decisiones arquitectónicas (ADRs).
 
 ## Requisitos previos
